@@ -1,1107 +1,334 @@
 #!/bin/bash
 
 # ============================================================
-# AETHER NEBULA v2.0 - MULTI-SERVER EDITION
-# Dynamic Port Management + Server Instances
+# AETHERPANEL NEBULA - V1.1 (LAYOUT FIX + MANUAL UPDATE)
+# - Horizontal Action Buttons
+# - Manual Update Check in Settings
+# - Fixed Sidebar Footer position
 # ============================================================
-
-set -euo pipefail # Modo estricto para fallar al primer error
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-VIOLET='\033[0;35m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-ERROR='\033[0;31m'
-PANEL_USER="aetherpanel" # USUARIO DEDICADO PARA EL PANEL
-
-log_info() { echo -e "${CYAN}[INFO] $1${NC}"; }
-log_success() { echo -e "${GREEN}[✓] $1${NC}"; }
-log_error() { echo -e "${ERROR}[ERROR] $1${NC}" >&2; exit 1; }
-
-# Comprobar privilegios de root
-if [ "$(id -u)" -ne 0 ]; then
-    log_error "Este script debe ejecutarse como root. Usa 'sudo bash script_name.sh'."
-fi
-
 clear
-echo -e "${MAGENTA}════════════════════════════════════════════════${NC}"
-echo -e "${VIOLET}  ✨ NEBULA v2.0 MULTI-SERVER EDITION          ${NC}"
-echo -e "${MAGENTA}════════════════════════════════════════════════${NC}"
+set -e
 
-# 1. SISTEMA BASE Y SEGURIDAD
-log_info "[1/9] Preparando sistema base y usuario (${PANEL_USER})..."
+# Colores
+CYAN='\033[0;36m'
+PURPLE='\033[0;35m'
+GREEN='\033[0;32m'
+NC='\033[0m'
 
-# Crear usuario dedicado si no existe
-if ! id "$PANEL_USER" &>/dev/null; then
-    log_info "Creando usuario de servicio: ${PANEL_USER}"
-    useradd -m -s /bin/bash "$PANEL_USER"
-fi
+echo -e "${PURPLE}🌌 APLICANDO PARCHES VISUALES NEBULA V1.1...${NC}"
 
-# Instalar dependencias
-if ! apt-get update -y > /dev/null; then log_error "Error al actualizar paquetes."; fi
+# ============================================================
+# 1. ACTUALIZACIÓN DE ARCHIVOS WEB
+# ============================================================
+echo -e "${GREEN}[1/2] ⚡ Actualizando interfaz (Frontend)...${NC}"
 
-# Incluye 'fs-extra' en las dependencias de Node.js
-DEPENDENCIES="git nodejs npm curl unzip zip tar build-essential ufw openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless"
-if ! apt-get install -y $DEPENDENCIES > /dev/null 2>&1; then
-    log_info "Advertencia: Algunos paquetes de Java no pudieron instalarse. Continuando..."
-fi
+# Detenemos momentáneamente para escribir archivos
+systemctl stop aetherpanel >/dev/null 2>&1 || true
 
-# Configurar UFW (regla base para el panel)
-ufw allow 3000/tcp comment 'AetherPanel Port' > /dev/null 2>&1
-ufw default deny incoming > /dev/null 2>&1
-ufw default allow outgoing > /dev/null 2>&1
-if ! ufw status | grep -q "Status: active"; then
-    ufw --force enable > /dev/null 2>&1
-fi
-log_success "Sistema base y UFW para el panel listos."
-
-# 2. CONFIGURACIÓN DE SUDOERS (Permisos Dinámicos de UFW)
-log_info "[2/9] Configurando sudoers para gestión dinámica de UFW..."
-UFW_CONFIG_FILE="/etc/sudoers.d/aetherpanel-ufw"
-# Comandos específicos para abrir/cerrar puertos con UFW y un comentario.
-UFW_COMMANDS="/usr/sbin/ufw allow * comment *,\n/usr/sbin/ufw delete allow * comment *"
-
-# Escapar los comandos para el archivo sudoers
-# Esto permite que el usuario del panel ejecute SÓLO estos comandos de ufw sin contraseña
-echo "${PANEL_USER} ALL=NOPASSWD: ${UFW_COMMANDS}" | sed 's/\\n//g' | sudo tee ${UFW_CONFIG_FILE} > /dev/null
-sudo chmod 0440 ${UFW_CONFIG_FILE}
-
-log_success "Permisos de UFW configurados. Panel puede abrir/cerrar puertos dinámicamente."
-
-# 3. ESTRUCTURA Y PERMISOS
-log_info "[3/9] Creando arquitectura y asignando permisos a ${PANEL_USER}..."
-mkdir -p /opt/aetherpanel/{public,servers,uploads,modules,backups,logs,templates,config} # 'servers' sin '/default'
-chown -R "$PANEL_USER":"$PANEL_USER" /opt/aetherpanel
-log_success "Estructura de directorios creada."
-
-# 4. GIT CONFIG
-log_info "[4/9] Configurando Git..."
-cd /opt/aetherpanel || log_error "No se pudo cambiar al directorio del panel."
-if [ ! -d ".git" ]; then
-    git init > /dev/null 2>&1
-    git remote add origin https://github.com/reychampi/nebula.git 2>/dev/null || log_info "Advertencia: Repo remoto no añadido."
-    git branch -M main > /dev/null 2>&1
-fi
-git config --global --add safe.directory /opt/aetherpanel
-log_success "Git configurado."
-
-# 5. PACKAGE.JSON y Dependencias
-log_info "[5/9] Definiendo dependencias de Node.js..."
-cat <<'EOF' > /opt/aetherpanel/package.json
-{
-  "name": "nebula-ultimate-multi",
-  "version": "2.1.0",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "cors": "^2.8.5",
-    "multer": "^1.4.5-lts.1",
-    "archiver": "^6.0.1",
-    "systeminformation": "^5.21.0",
-    "axios": "^1.6.2",
-    "node-schedule": "^2.1.1",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
-    "compression": "^1.7.4",
-    "fs-extra": "^11.2.0" 
-  }
-}
-EOF
-log_success "package.json listo."
-
-# 6. MÓDULOS DEL SISTEMA (UPDATER, WORLDS, MARKETPLACE, SCHEDULER)
-
-log_info "[6/9] Compilando módulos de apoyo..."
-
-# 6.1 UPDATER (No necesita cambios funcionales)
-cat <<'EOF' > /opt/aetherpanel/modules/updater.js
-const { exec } = require('child_process');
-const path = require('path');
-// ... (Contenido de updater.js)
-class Updater {
-    constructor() { this.cwd = path.join(__dirname, '..'); }
-    check() {
-        return new Promise((resolve) => {
-            exec('git fetch origin', { cwd: this.cwd }, (err) => {
-                if (err) return resolve({ needsUpdate: false, error: 'No git repo' });
-                exec('git status -uno', { cwd: this.cwd }, (err, stdout) => {
-                    if (err) return resolve({ needsUpdate: false, error: 'Git status error' });
-                    const output = stdout.toString();
-                    const needsUpdate = output.includes('behind');
-                    resolve({ needsUpdate, msg: needsUpdate ? 'Nueva versión disponible' : 'Sistema actualizado' });
-                });
-            });
-        });
-    }
-    pull() {
-        return new Promise((resolve, reject) => {
-            const cmd = 'git reset --hard HEAD && git pull origin main && rm -rf node_modules && npm install';
-            exec(cmd, { cwd: this.cwd }, (err, stdout, stderr) => {
-                if (err) { console.error('Git/NPM Error:', stderr); reject(new Error(`Update failed: ${stderr}`)); } 
-                else { resolve(stdout); }
-            });
-        });
-    }
-}
-module.exports = Updater;
-EOF
-
-# 6.2 MARKETPLACE (Basepath se pasa por el manager)
-cat <<'EOF' > /opt/aetherpanel/modules/marketplace.js
-const axios = require('axios');
-const fs = require('fs-extra');
-const path = require('path');
-// ... (Contenido de marketplace.js)
-class Market {
-    constructor(basePath) { 
-        this.basePath = basePath;
-        this.curseForgeKey = process.env.CURSEFORGE_API_KEY || 'YOUR_CURSEFORGE_API_KEY'; 
-    }
-    async search(query, loader='paper', source='modrinth') {
-        if(source === 'modrinth') return this.searchModrinth(query, loader);
-        if(source === 'curseforge') return this.searchCurseforge(query, loader);
-        return [];
-    }
-    async searchModrinth(query, loader) {
-        let facet = '["categories:bukkit"]';
-        if(loader==='fabric') facet = '["categories:fabric"]';
-        if(loader==='forge'||loader==='neoforge') facet = '["categories:forge"]';
-        try {
-            const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(query)}&facets=[${facet}]&limit=20`;
-            const r = await axios.get(url);
-            return r.data.hits.map(h => ({ title: h.title, icon: h.icon_url, author: h.author, id: h.project_id, downloads: h.downloads, description: h.description, source: 'modrinth' }));
-        } catch(e) { console.error('Modrinth search error:', e.message); return []; }
-    }
-    async searchCurseforge(query, loader) {
-        if(this.curseForgeKey === 'YOUR_CURSEFORGE_API_KEY') return [];
-        try {
-            const gameId = 432; 
-            const url = `https://api.curseforge.com/v1/mods/search?gameId=${gameId}&searchFilter=${encodeURIComponent(query)}`;
-            const r = await axios.get(url, { headers: { 'x-api-key': this.curseForgeKey } });
-            const results = r.data.data.filter(m => {
-                const isMod = m.classId === 6; 
-                const isPlugin = m.classId === 5; 
-                if ((loader === 'fabric' || loader === 'forge' || loader === 'neoforge') && isMod) return true;
-                if (loader === 'paper' && isPlugin) return true;
-                return isMod || isPlugin; 
-            });
-            return results.map(m => ({ title: m.name, icon: m.logo?.url, author: m.authors[0]?.name, id: m.id, downloads: m.downloadCount, description: m.summary, source: 'curseforge' }));
-        } catch(e) { console.error('CurseForge search error:', e.message); return []; }
-    }
-    async install(projectId, filename, source='modrinth') {
-        if(source === 'modrinth') return this.installModrinth(projectId, filename);
-        if(source === 'curseforge') return this.installCurseforge(projectId, filename);
-    }
-    async installModrinth(projectId, filename) {
-        const v = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`);
-        if (!v.data || v.data.length === 0 || v.data[0].files.length === 0) throw new Error("No files found for this Modrinth project.");
-        const fileObj = v.data[0].files[0];
-        let subDir = this.detectPluginDir();
-        const targetDir = path.join(this.basePath, subDir);
-        await fs.ensureDir(targetDir);
-        const targetFilename = path.join(targetDir, filename || fileObj.filename);
-        const writer = fs.createWriteStream(targetFilename);
-        const response = await axios({ url: fileObj.url, method: 'GET', responseType: 'stream' });
-        response.data.pipe(writer);
-        return new Promise((res, rej) => { writer.on('finish', res); writer.on('error', rej); });
-    }
-    async installCurseforge(modId, filename) {
-        if(this.curseForgeKey === 'YOUR_CURSEFORGE_API_KEY') throw new Error("CurseForge API Key is not configured.");
-        const filesUrl = `https://api.curseforge.com/v1/mods/${modId}/files`;
-        const r = await axios.get(filesUrl, { headers: { 'x-api-key': this.curseForgeKey } });
-        if (!r.data.data || r.data.data.length === 0) throw new Error("No files found for this CurseForge project.");
-        const latestFile = r.data.data[0]; 
-        let subDir = this.detectPluginDir();
-        const targetDir = path.join(this.basePath, subDir);
-        await fs.ensureDir(targetDir);
-        const targetFilename = path.join(targetDir, filename || latestFile.fileName);
-        const writer = fs.createWriteStream(targetFilename);
-        const response = await axios({ url: latestFile.downloadUrl, method: 'GET', responseType: 'stream' });
-        response.data.pipe(writer);
-        return new Promise((res, rej) => { writer.on('finish', res); writer.on('error', rej); });
-    }
-    detectPluginDir() {
-        if(fs.existsSync(path.join(this.basePath, 'plugins'))) return 'plugins';
-        if(fs.existsSync(path.join(this.basePath, 'mods'))) return 'mods';
-        return 'plugins'; 
-    }
-    async installModpack(url) {
-        const tempZip = path.join(this.basePath, 'temp_modpack.zip');
-        await fs.ensureDir(this.basePath);
-        const writer = fs.createWriteStream(tempZip);
-        const response = await axios({ url, method: 'GET', responseType: 'stream', timeout: 300000 });
-        response.data.pipe(writer);
-        await new Promise((res, rej) => {
-            writer.on('finish', res);
-            writer.on('error', (err) => { fs.unlink(tempZip, () => {}); rej(err); });
-        });
-        const { spawn } = require('child_process');
-        return new Promise((res, rej) => {
-            const unzip = spawn('unzip', ['-o', tempZip, '-d', this.basePath]);
-            unzip.on('close', (code) => {
-                fs.unlink(tempZip, () => {}); 
-                if(code === 0) { res(); } 
-                else { rej(new Error(`Unzip failed with code ${code}`)); }
-            });
-            unzip.on('error', rej);
-        });
-    }
-}
-module.exports = Market;
-EOF
-
-# 6.3 WORLDS (Basepath se pasa por el manager)
-cat <<'EOF' > /opt/aetherpanel/modules/worlds.js
-const fs = require('fs-extra');
-const path = require('path');
-const archiver = require('archiver');
-// ... (Contenido de worlds.js)
-class Worlds {
-    constructor(basePath) { 
-        this.basePath = basePath; 
-        this.backupPath = path.resolve('/opt/aetherpanel/backups'); 
-        fs.ensureDirSync(this.backupPath);
-    }
-    resetDimension(dim) {
-        let targets = [];
-        const worldName = this.detectWorldName(); 
-        if(dim === 'overworld') targets = [worldName];
-        if(dim === 'nether') targets = [path.join(worldName, 'DIM-1'), `${worldName}_nether`]; 
-        if(dim === 'end') targets = [path.join(worldName, 'DIM1'), `${worldName}_the_end`];
-        let found = false;
-        targets.forEach(t => {
-            const p = path.join(this.basePath, t);
-            if(fs.existsSync(p)) { 
-                fs.removeSync(p); 
-                found = true; 
-            }
-        });
-        if(!found) throw new Error('Dimensión no encontrada o no existe para el servidor actual.');
-        return { success: true, message: `Dimensión ${dim} reseteada` };
-    }
-    detectWorldName() {
-        const serverPropsPath = path.join(this.basePath, 'server.properties');
-        if(fs.existsSync(serverPropsPath)) {
-            const properties = fs.readFileSync(serverPropsPath, 'utf8');
-            const match = properties.match(/^level-name=(.*)$/m);
-            if(match && match[1]) return match[1].trim();
-        }
-        return 'world';
-    }
-    async createBackup(name) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const serverId = path.basename(this.basePath);
-        const backupName = name || `backup-${serverId}-${timestamp}.zip`;
-        const outputPath = path.join(this.backupPath, backupName);
-        const output = fs.createWriteStream(outputPath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        return new Promise((resolve, reject) => {
-            output.on('close', () => resolve({ success: true, filename: backupName, size: (archive.pointer() / 1024 / 1024).toFixed(2) + ' MB' }));
-            archive.on('error', reject);
-            archive.pipe(output);
-            archive.glob('**/*', { 
-                cwd: this.basePath,
-                ignore: ['logs/**', 'cache/**', '*.log', 'temp_*', 'node_modules/**', '*.jar']
-            });
-            archive.finalize();
-        });
-    }
-    listBackups() {
-        if(!fs.existsSync(this.backupPath)) return [];
-        return fs.readdirSync(this.backupPath)
-            .filter(f => f.endsWith('.zip'))
-            .map(f => {
-                const stats = fs.statSync(path.join(this.backupPath, f));
-                return { name: f, size: (stats.size / 1024 / 1024).toFixed(2) + ' MB', date: stats.mtime.toLocaleString() };
-            });
-    }
-    async restoreBackup(filename) {
-        const { spawn } = require('child_process');
-        const backupFile = path.join(this.backupPath, filename);
-        if(!fs.existsSync(backupFile)) throw new Error('Backup no encontrado');
-        return new Promise((resolve, reject) => {
-            const unzip = spawn('unzip', ['-o', backupFile, '-d', this.basePath]);
-            let stderr = '';
-            unzip.stderr.on('data', (data) => { stderr += data.toString(); });
-            unzip.on('close', code => {
-                if(code === 0) resolve({ success: true });
-                else reject(new Error(`Error al restaurar (código: ${code}): ${stderr}`));
-            });
-            unzip.on('error', reject);
-        });
-    }
-}
-module.exports = Worlds;
-EOF
-
-# 6.4 SCHEDULER (Necesita recibir la instancia del servidor)
-cat <<'EOF' > /opt/aetherpanel/modules/scheduler.js
-const schedule = require('node-schedule');
-// ... (Contenido de scheduler.js)
-class Scheduler {
-    constructor(serverInstance) { // Ahora recibe la instancia ServerInstance
-        this.serverInstance = serverInstance;
-        this.jobs = {};
-    }
-    addTask(name, cron, action, data) {
-        if(!name || !cron || !action) throw new Error("Missing name, cron, or action for scheduler task.");
-        if(this.jobs[name]) this.jobs[name].cancel();
-        const validActions = ['restart', 'backup', 'stop', 'command'];
-        if (!validActions.includes(action)) throw new Error(`Invalid action: ${action}`);
-        this.jobs[name] = schedule.scheduleJob(cron, () => {
-            this.serverInstance.log(`⏰ Tarea programada: ${name} (${action})`);
-            if(action === 'restart') this.serverInstance.restart();
-            else if(action === 'backup') this.serverInstance.createBackup();
-            else if(action === 'stop') this.serverInstance.stop();
-            else if(action === 'command' && data) this.serverInstance.sendCommand(data);
-        });
-        if (action === 'command') this.jobs[name].data = data;
-        return { success: true, message: `Tarea ${name} programada: ${cron}` };
-    }
-    removeTask(name) {
-        if(this.jobs[name]) {
-            this.jobs[name].cancel();
-            delete this.jobs[name];
-            return { success: true };
-        }
-        return { success: false, error: 'Tarea no encontrada' };
-    }
-    listTasks() {
-        return Object.keys(this.jobs).map(name => ({
-            name,
-            nextRun: this.jobs[name].nextInvocation()?.toString()
-        }));
-    }
-}
-module.exports = Scheduler;
-EOF
-
-# 7. MC_SERVER_MANAGER.JS (El gestor central de múltiples servidores)
-
-log_info "[7/9] Creando el núcleo Multi-Servidor (mc_server_manager.js)..."
-
-cat <<'MC_SERVER_MANAGER_JS' > /opt/aetherpanel/mc_server_manager.js
-const fs = require('fs-extra');
-const path = require('path');
-const { spawn, exec } = require('child_process');
-const si = require('systeminformation');
-const Worlds = require('./modules/worlds');
-const Scheduler = require('./modules/scheduler');
-const Market = require('./modules/marketplace'); // Market se queda en el manager por simplicidad de la API
-
-const SERVERS_DIR = path.join(__dirname, 'servers');
-const PANEL_CONFIG_PATH = path.join(__dirname, 'config', 'panel.json');
-
-// ===============================================
-// CLASE SERVER INSTANCE (Un solo servidor)
-// ===============================================
-
-class ServerInstance {
-    constructor(id, io) {
-        this.id = id;
-        this.io = io;
-        this.basePath = path.join(SERVERS_DIR, id);
-        this.configPath = path.join(this.basePath, 'config.json');
-        this.eulaPath = path.join(this.basePath, 'eula.txt');
-        this.serverPropsPath = path.join(this.basePath, 'server.properties');
-        
-        this.serverProcess = null;
-        this.status = 'offline';
-        this.logs = [];
-        this.maxLogs = 500;
-        
-        fs.ensureDirSync(this.basePath);
-        this.config = this.loadConfig();
-
-        // Inicializar módulos por instancia
-        this.worlds = new Worlds(this.basePath);
-        this.scheduler = new Scheduler(this);
-        this.market = new Market(this.basePath); // Instancia de marketplace para rutas de archivos
-    }
-
-    // --- Configuración ---
-    loadConfig() {
-        const defaultConfig = {
-            memory: '1024',
-            jarName: '',
-            type: 'paper',
-            version: '',
-            port: 25565 // Puerto por defecto
-        };
-        if (!fs.existsSync(this.configPath)) {
-            this.saveConfig(defaultConfig);
-            return defaultConfig;
-        }
-        return { ...defaultConfig, ...JSON.parse(fs.readFileSync(this.configPath, 'utf8')) };
-    }
-
-    saveConfig(newConfig) {
-        this.config = { ...this.config, ...newConfig };
-        fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
-    }
+# --- INDEX.HTML (Ajustes: Botón Update Agregado) ---
+cat <<'EOF' > /opt/aetherpanel/public/index.html
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEBULA V1.1</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
+</head>
+<body>
+    <div id="editor-modal" class="modal-overlay" style="display:none"><div class="modal glass"><div class="modal-header"><h3>Editor</h3><div><button class="btn btn-ghost" onclick="closeEditor()">Cerrar</button><button class="btn btn-primary" onclick="saveFile()">Guardar</button></div></div><div id="ace-editor"></div></div></div>
+    <div id="version-modal" class="modal-overlay" style="display:none"><div class="modal glass version-modal"><div class="modal-header"><h3><i class="fa-solid fa-cloud"></i> Repositorio</h3><button class="btn btn-ghost" onclick="document.getElementById('version-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div><div class="mod-search"><input type="text" id="version-search" placeholder="Buscar versión..." class="search-input" autofocus><span id="loading-text" style="display:none;font-size:12px;color:var(--p)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span></div><div id="version-list" class="version-grid"></div></div></div>
     
-    // --- Logs y Estado ---
-    log(msg) {
-        const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-        const logEntry = `[${timestamp}][${this.id}] ${msg}`;
-        this.logs.push(logEntry);
-        if (this.logs.length > this.maxLogs) this.logs.shift();
-        this.io.to(this.id).emit('logs', logEntry); // Emitir a la sala del servidor
-    }
+    <div id="update-modal" class="modal-overlay" style="display:none">
+        <div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;">
+            <div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div>
+            <h3>Nueva Versión Disponible</h3>
+            <p id="update-text" style="color:var(--muted); margin-bottom:20px">Calculando...</p>
+            <div style="display:flex; flex-direction:column; gap:10px">
+                <button onclick="updateSystem('now')" class="btn btn-primary">ACTUALIZAR AHORA</button>
+                <button onclick="updateSystem('stop')" class="btn" style="background:#f59e0b; color:white">AL APAGAR SERVIDOR</button>
+                <button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">CANCELAR</button>
+            </div>
+        </div>
+    </div>
 
-    getStatus() {
-        return {
-            status: this.status,
-            id: this.id,
-            port: this.config.port,
-            pid: this.serverProcess ? this.serverProcess.pid : null,
-            jar: this.config.jarName || this.detectJarFile()
-        };
-    }
-    
-    // --- Control del Servidor ---
-    async start() {
-        if (this.serverProcess) {
-            this.log('El servidor ya está activo.');
-            return;
-        }
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text">V1.1 <span>NEBULA</span></div></div>
+            <nav>
+                <div class="nav-label">CORE</div>
+                <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
+                <button onclick="setTab('console', this)" class="nav-btn"><i class="fa-solid fa-terminal"></i> Consola</button>
+                <div class="nav-label">DATA</div>
+                <button onclick="setTab('files', this)" class="nav-btn"><i class="fa-solid fa-folder-tree"></i> Archivos</button>
+                <button onclick="setTab('versions', this)" class="nav-btn"><i class="fa-solid fa-layer-group"></i> Núcleos</button>
+                <button onclick="setTab('backups', this)" class="nav-btn"><i class="fa-solid fa-box-archive"></i> Backups</button>
+                <button onclick="setTab('config', this)" class="nav-btn"><i class="fa-solid fa-sliders"></i> Ajustes</button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="theme-switcher">
+                    <button onclick="setTheme('light')" class="theme-btn" title="Claro"><i class="fa-solid fa-sun"></i></button>
+                    <button onclick="setTheme('dark')" class="theme-btn active" title="Oscuro"><i class="fa-solid fa-moon"></i></button>
+                    <button onclick="setTheme('auto')" class="theme-btn" title="Sistema"><i class="fa-solid fa-desktop"></i></button>
+                </div>
+                <div class="status-widget OFFLINE" id="status-widget"><div class="status-indicator"></div><span id="status-text">OFFLINE</span></div>
+            </div>
+        </aside>
+        <main>
+            <header>
+                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary">V1.1</span><span class="badge">Stable</span></div></div>
+                <div class="actions">
+                    <button onclick="api('power/start')" class="btn-control start" title="Iniciar"><i class="fa-solid fa-play"></i></button>
+                    <button onclick="api('power/restart')" class="btn-control restart" title="Reiniciar"><i class="fa-solid fa-rotate-right"></i></button>
+                    <button onclick="api('power/stop')" class="btn-control stop" title="Detener"><i class="fa-solid fa-power-off"></i></button>
+                    <button onclick="api('power/kill')" class="btn-control kill" title="Forzar Apagado"><i class="fa-solid fa-skull-crossbones"></i></button>
+                </div>
+            </header>
 
-        const jarFile = this.config.jarName || this.detectJarFile();
-        if (!jarFile) {
-            this.log('ERROR: No se encontró ningún JAR para iniciar el servidor.');
-            throw new Error('No JAR found');
-        }
-        
-        await this.updateFirewall('add'); // <--- ABRIR PUERTO
-        this.fixEula();
-        this.updateServerProperties({ 'server-port': this.config.port }); // Asegurar puerto en server.properties
-
-        this.log(`Iniciando servidor con ${jarFile} en el puerto ${this.config.port}...`);
-        
-        const javaPath = (new MCServerManager()).getPanelConfig().javaPath || 'java'; 
-        const args = [`-Xmx${this.config.memory || '1024'}M`, '-jar', jarFile, 'nogui'];
-
-        this.serverProcess = spawn(javaPath, args, { cwd: this.basePath });
-        this.status = 'starting';
-        this.io.emit('status_update', this.getStatus());
-
-        this.serverProcess.stdout.on('data', (data) => {
-            const output = data.toString().trim();
-            output.split('\n').forEach(line => this.log(line));
-            if (output.includes('Done') || output.includes('For help, type "help"')) {
-                this.status = 'online';
-                this.io.emit('status_update', this.getStatus());
-            }
-        });
-
-        this.serverProcess.on('close', async (code) => {
-            await this.updateFirewall('delete'); // <--- CERRAR PUERTO
-            this.log(`Servidor detenido con código ${code}`);
-            this.serverProcess = null;
-            this.status = 'offline';
-            this.io.emit('status_update', this.getStatus());
-            if (code !== 0 && code !== null) {
-                this.log('Reiniciando automáticamente debido a un fallo inesperado...');
-                setTimeout(() => this.start().catch(e => this.log(`Error en auto-reinicio: ${e.message}`)), 5000);
-            }
-        });
-    }
-
-    async stop() {
-        if (!this.serverProcess) {
-            this.log('El servidor ya está detenido.');
-            return;
-        }
-        this.log('Enviando comando de parada...');
-        this.sendCommand('stop');
-        this.status = 'stopping';
-        this.io.emit('status_update', this.getStatus());
-        
-        await new Promise(resolve => {
-            const timeout = setTimeout(() => {
-                if (this.serverProcess) {
-                    this.log('Advertencia: La parada forzada fue necesaria.');
-                    this.serverProcess.kill('SIGKILL');
-                }
-                resolve();
-            }, 30000); // 30 segundos
+            <div id="tab-stats" class="tab-content active">
+                <div class="stats-grid">
+                    <div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div>
+                    <div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div>
+                    <div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div>
+                </div>
+            </div>
             
-            this.serverProcess.on('close', () => {
-                clearTimeout(timeout);
-                resolve();
-            });
-        });
-    }
+            <div id="tab-console" class="tab-content"><div class="console-box glass"><div id="terminal"></div></div></div>
+            <div id="tab-files" class="tab-content"><div class="card glass full"><div class="card-header"><div class="breadcrumb" id="file-breadcrumb">/root</div><div><button onclick="loadFileBrowser(currentPath)" class="btn btn-ghost"><i class="fa-solid fa-rotate"></i></button><button onclick="uploadFile()" class="btn btn-primary"><i class="fa-solid fa-upload"></i></button></div></div><div id="file-list" class="file-list"></div></div></div>
+            
+            <div id="tab-versions" class="tab-content">
+                <h2 class="tab-title">Núcleos Disponibles</h2>
+                <div class="versions-container">
+                    <div class="version-card glass" onclick="loadVersions('vanilla')"><div class="v-icon" style="background:#27ae60"><i class="fa-solid fa-cube"></i></div><div class="v-info"><h3>Vanilla</h3><p>Oficial</p></div></div>
+                    <div class="version-card glass" onclick="loadVersions('paper')"><div class="v-icon" style="background:#2980b9"><i class="fa-solid fa-paper-plane"></i></div><div class="v-info"><h3>Paper</h3><p>Optimizado</p></div></div>
+                    <div class="version-card glass" onclick="loadVersions('fabric')"><div class="v-icon" style="background:#f39c12"><i class="fa-solid fa-scroll"></i></div><div class="v-info"><h3>Fabric</h3><p>Mods</p></div></div>
+                    <div class="version-card glass" onclick="loadVersions('forge')"><div class="v-icon" style="background:#c0392b"><i class="fa-solid fa-hammer"></i></div><div class="v-info"><h3>Forge</h3><p>Ilimitado</p></div></div>
+                </div>
+            </div>
+            
+            <div id="tab-backups" class="tab-content"><div class="card glass full"><div class="card-header"><h3>Backups</h3><button onclick="createBackup()" class="btn btn-primary">Crear</button></div><div id="backup-list" class="file-list"></div></div></div>
+            
+            <div id="tab-config" class="tab-content">
+                <div class="card glass full">
+                    <div class="card-header">
+                        <h3>Configuración del Servidor</h3>
+                        <button onclick="saveCfg()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+                    </div>
+                    <div id="cfg-list" class="cfg-grid"></div>
+                    
+                    <div style="padding: 20px; border-top: 1px solid var(--border); margin-top: 20px;">
+                        <h3 style="color: var(--muted); font-size: 0.9rem; margin-bottom: 15px;">MANTENIMIENTO DEL SISTEMA</h3>
+                        <button onclick="manualUpdateCheck()" class="btn" style="background: var(--glass); border: 1px solid var(--border); width: 100%; justify-content: center;">
+                            <i class="fa-solid fa-rotate"></i> BUSCAR ACTUALIZACIONES DE NEBULA
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
+EOF
 
-    async restart() {
-        this.log('Reiniciando servidor...');
-        if (this.serverProcess) {
-            await this.stop();
-        }
-        await this.start();
-    }
+# --- STYLE.CSS (Fixes: Footer Position & Horizontal Actions) ---
+cat <<'EOF' > /opt/aetherpanel/public/style.css
+:root { --bg: #0f0f13; --sb: #050507; --card-bg: #121214; --glass: rgba(255,255,255,0.03); --border: rgba(255,255,255,0.06); --p: #8b5cf6; --txt: #e4e4e7; --muted: #71717a; --radius: 12px; --console-bg: #000000; }
+[data-theme="light"] { --bg: #f8fafc; --sb: #ffffff; --card-bg: #ffffff; --glass: rgba(0,0,0,0.02); --border: rgba(0,0,0,0.08); --p: #6366f1; --txt: #0f172a; --muted: #64748b; --console-bg: #1e293b; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--txt); height: 100vh; overflow: hidden; transition: background 0.3s, color 0.3s; }
+.glass { background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: var(--radius); background-color: var(--card-bg); }
 
-    sendCommand(cmd) {
-        if (this.serverProcess && this.status !== 'offline') {
-            this.log(`> ${cmd}`);
-            this.serverProcess.stdin.write(`${cmd}\n`);
-            return true;
-        }
-        this.log(`ERROR: No se pudo enviar el comando '${cmd}', servidor offline.`);
-        return false;
-    }
-    
-    // --- Gestión de Archivos y Propiedades ---
-    updateServerProperties(newProps) {
-        let content = '';
-        if (fs.existsSync(this.serverPropsPath)) { content = fs.readFileSync(this.serverPropsPath, 'utf8'); }
+.app-layout { display: flex; height: 100%; }
 
-        let newContent = content;
-        for (const key in newProps) {
-            const regex = new RegExp(`^${key}=.*$`, 'm');
-            const newLine = `${key}=${newProps[key]}`;
-            if (newContent.match(regex)) {
-                newContent = newContent.replace(regex, newLine);
-            } else {
-                newContent += `\n${newLine}`;
-            }
-        }
-        fs.writeFileSync(this.serverPropsPath, newContent);
-    }
-    
-    fixEula() {
-        if (!fs.existsSync(this.eulaPath)) {
-            fs.writeFileSync(this.eulaPath, 'eula=true\n# By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).');
-            this.log('EULA.txt creado y aceptado.');
-        } else {
-            let content = fs.readFileSync(this.eulaPath, 'utf8');
-            if (!content.includes('eula=true')) {
-                content = content.replace(/^eula=.*$/m, 'eula=true');
-                fs.writeFileSync(this.eulaPath, content);
-                this.log('EULA.txt actualizado a true.');
-            }
-        }
-    }
-    
-    detectJarFile() {
-        try {
-            const files = fs.readdirSync(this.basePath);
-            return files.find(f => f.endsWith('.jar'));
-        } catch { return null; }
-    }
-
-    listFiles(dir) {
-        const fullPath = path.join(this.basePath, dir);
-        if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isDirectory()) { return []; }
-        // ... (lógica de listFiles, omitida por espacio, asume la lógica del prompt)
-    }
-
-    // --- UFW Dinámico (Requiere sudoers NOPASSWD) ---
-    async updateFirewall(action) {
-        const port = this.config.port;
-        if (!port) return;
-
-        // Comentario único para identificar la regla. Esto es CRUCIAL para borrar la regla correcta.
-        const comment = `Nebula-SVR-${this.id}`;
-        let cmd;
-        
-        if (action === 'add') {
-             // El comando sudoers configurado soporta 'ufw allow PORT/tcp comment COMMENT'
-            cmd = `ufw allow ${port}/tcp comment '${comment}'`;
-        } else if (action === 'delete') {
-            // Eliminar la regla de UFW por el comentario (más robusto que solo por puerto)
-            // Esto requiere buscar la regla con el comentario. Es más seguro pero requiere comandos más complejos.
-            // Para simplificar y usar la regla NOPASSWD configurada:
-            cmd = `ufw delete allow ${port}/tcp`;
-        } else {
-            return;
-        }
-
-        const fullCmd = `sudo ${cmd}`;
-
-        return new Promise((resolve, reject) => {
-            exec(fullCmd, { uid: 0, gid: 0 }, (error, stdout, stderr) => {
-                if (error && !stderr.includes("Rule is not currently active")) {
-                    console.error(`Error UFW para ${this.id}: ${stderr}`);
-                    this.log(`ERROR UFW: Fallo al ${action} el puerto ${port}. Verifique sudoers.`);
-                    reject(new Error(`Fallo al ${action} el puerto ${port}`));
-                } else {
-                    this.log(`UFW: Puerto ${port} (${this.id}) ${action === 'add' ? 'abierto' : 'cerrado'}.`);
-                    resolve();
-                }
-            });
-        });
-    }
-
-    // --- Delegación de Módulos ---
-    // Métodos para acceder a Worlds, Scheduler, etc.
-    async createBackup(name) { return this.worlds.createBackup(name); }
-    listBackups() { return this.worlds.listBackups(); }
-    restoreBackup(filename) { return this.worlds.restoreBackup(filename); }
-    
-    // ... (Delegación de Market y Scheduler) ...
+/* SIDEBAR FIXED LAYOUT */
+.sidebar { 
+    width: 260px; 
+    background: var(--sb); 
+    border-right: 1px solid var(--border); 
+    padding: 24px; 
+    display: flex; 
+    flex-direction: column; 
+    transition: background 0.3s;
+    height: 100vh; /* Asegurar altura completa */
+    justify-content: space-between; /* Empujar footer abajo */
 }
 
-// ===============================================
-// CLASE MC SERVER MANAGER (Gestor de instancias)
-// ===============================================
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-weight: 800; font-size: 1.4rem; flex-shrink: 0; } 
+.brand span { color: var(--p); } .brand-logo { color: var(--p); font-size: 1.2rem; }
 
-class MCServerManager {
-    constructor(io) {
-        this.io = io;
-        this.instances = {}; // { 'server-1': ServerInstance, ... }
-        this.panelConfig = this.loadPanelConfig();
-
-        this.loadInstances();
-    }
-    
-    // --- Configuración Global del Panel (AUTH, JAVA PATH) ---
-    loadPanelConfig() {
-        const defaultCfg = { password: '', discordWebhook: '', javaPath: 'java' };
-        fs.ensureDirSync(path.dirname(PANEL_CONFIG_PATH));
-        if (!fs.existsSync(PANEL_CONFIG_PATH)) {
-            fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(defaultCfg, null, 2));
-            return defaultCfg;
-        }
-        return JSON.parse(fs.readFileSync(PANEL_CONFIG_PATH, 'utf8'));
-    }
-
-    savePanelConfig() {
-        fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(this.panelConfig, null, 2));
-    }
-    getPanelConfig() { return this.panelConfig; }
-    setLabsAuth(hashedPassword) { this.panelConfig.password = hashedPassword; this.savePanelConfig(); }
-    
-    // --- Gestión de Instancias ---
-    loadInstances() {
-        if (!fs.existsSync(SERVERS_DIR)) return;
-        const serverDirs = fs.readdirSync(SERVERS_DIR).filter(f => fs.statSync(path.join(SERVERS_DIR, f)).isDirectory());
-        
-        for (const id of serverDirs) {
-            this.instances[id] = new ServerInstance(id, this.io);
-        }
-    }
-
-    listServers() {
-        return Object.values(this.instances).map(inst => ({
-            id: inst.id,
-            status: inst.status,
-            port: inst.config.port,
-            jar: inst.config.jarName,
-            version: inst.config.version
-        }));
-    }
-
-    getInstance(id) {
-        if (!this.instances[id]) throw new Error(`Servidor ID ${id} no encontrado.`);
-        return this.instances[id];
-    }
-    
-    async createServer(id, config = {}) {
-        if (this.instances[id]) throw new Error('Ya existe un servidor con ese ID.');
-        
-        const serverPath = path.join(SERVERS_DIR, id);
-        await fs.ensureDir(serverPath);
-        
-        const newInstance = new ServerInstance(id, this.io);
-        newInstance.saveConfig(config);
-        this.instances[id] = newInstance;
-        
-        return newInstance.getStatus();
-    }
-    
-    async deleteServer(id) {
-        const instance = this.getInstance(id);
-        if (instance.serverProcess) await instance.stop();
-        
-        await fs.remove(instance.basePath);
-        delete this.instances[id];
-    }
-
-    // --- Métodos de Rendimiento Global ---
-    async getPerformance() {
-        // Stats globales del host (CPU/MEM)
-        const [cpu, mem] = await Promise.all([si.currentLoad(), si.mem()]);
-        
-        return {
-            cpu: cpu.currentLoad.toFixed(2),
-            memUsed: (mem.used / 1024 / 1024).toFixed(0),
-            memTotal: (mem.total / 1024 / 1024).toFixed(0),
-            status: Object.values(this.instances).map(i => i.status)
-        };
-    }
-    
-    // --- Instalación (Compartida) ---
-    async fetchVersions(type) {
-        if (type === 'paper') {
-            const response = await axios.get('https://api.papermc.io/v2/projects/paper');
-            const versions = response.data.versions;
-            return versions.reverse().slice(0, 10).map(v => ({ version: v, type: 'Paper' }));
-        }
-        return [{ version: '1.20.4', type: 'Vanilla' }];
-    }
+nav {
+    flex: 1; /* Ocupar espacio disponible */
+    overflow-y: auto; /* Scroll si hay muchos items */
+    margin-bottom: 20px;
 }
 
-module.exports = { MCServerManager, ServerInstance };
-MC_SERVER_MANAGER_JS
-log_success "mc_server_manager.js (Instancias) creado."
+.sidebar-footer {
+    margin-top: auto; /* Redundancia para seguridad */
+    flex-shrink: 0; /* No encoger */
+}
 
-# 8. SERVER.JS (Núcleo API)
+.nav-label { font-size: 0.7rem; color: var(--muted); font-weight: 700; margin: 20px 0 8px 12px; letter-spacing: 1px; }
+.nav-btn { width: 100%; background: transparent; border: none; padding: 12px; color: var(--muted); text-align: left; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 500; display: flex; align-items: center; gap: 12px; transition: 0.2s; }
+.nav-btn:hover { background: var(--glass); color: var(--txt); } .nav-btn.active { background: rgba(139,92,246,0.1); color: var(--p); font-weight: 700; }
 
-log_info "[8/9] Compilando núcleo del servidor (server.js) y adaptando rutas..."
+.theme-switcher { display: flex; background: var(--glass); padding: 4px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); }
+.theme-btn { flex: 1; background: transparent; border: none; color: var(--muted); padding: 6px; border-radius: 6px; cursor: pointer; transition: 0.2s; } .theme-btn:hover { color: var(--txt); } .theme-btn.active { background: var(--bg); color: var(--p); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.status-widget { background: var(--glass); padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.status-indicator { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; } .ONLINE .status-indicator { background: #10b981; box-shadow: 0 0 10px rgba(16,185,129,0.4); }
 
-cat <<'SERVERJS' > /opt/aetherpanel/server.js
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-const multer = require('multer');
-const helmet = require('helmet');
-const compression = require('compression');
-const rateLimit = require('express-rate-limit');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+main { flex: 1; padding: 32px 40px; display: flex; flex-direction: column; overflow-y: auto; }
 
-// IMPORTAR NUEVOS MÓDULOS REFACORIZADOS
-const { MCServerManager } = require('./mc_server_manager');
-const Updater = require('./modules/updater');
-const Market = require('./modules/marketplace'); // Para búsquedas globales
+/* HEADER FIXED - HORIZONTAL ACTIONS */
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+.actions { 
+    display: flex; 
+    gap: 10px; 
+    align-items: center;
+    flex-direction: row !important; /* FORZAR HORIZONTAL */
+}
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+.badges { display: flex; gap: 8px; margin-top: 8px; } .badge { font-size: 0.7rem; background: var(--glass); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); font-weight: 600; color: var(--muted); }
+.btn-control { width: 44px; height: 44px; border-radius: 12px; border: none; color: white; cursor: pointer; font-size: 1.1rem; transition: 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; } .btn-control:hover { transform: scale(1.05); }
+.start { background: linear-gradient(135deg, #10b981, #059669); } .restart { background: linear-gradient(135deg, #f59e0b, #d97706); } .stop { background: linear-gradient(135deg, #ef4444, #dc2626); } .kill { background: #27272a; }
 
-// MIDDLEWARE DE SEGURIDAD
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(compression());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+.tab-content { display: none; animation: fadeUp 0.3s ease; } .tab-content.active { display: block; } @keyframes fadeUp { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.card { padding: 24px; display: flex; flex-direction: column; background-color: var(--card-bg); } .card.full { min-height: 400px; }
+.card-header { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; } .card-header h3 { font-size: 0.9rem; color: var(--muted); font-weight: 600; } .stat-value { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.2rem; }
+.chart-container { height: 140px; position: relative; width: 100%; }
+.console-box { height: calc(100vh - 220px); background: var(--console-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 16px; overflow: hidden; } #terminal { height: 100%; }
+.file-row { display: flex; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; font-family: 'JetBrains Mono'; font-size: 0.9rem; transition: 0.1s; color: var(--txt); } .file-row:hover { background: rgba(128,128,128,0.05); }
+.disk-bar { height: 6px; background: rgba(128,128,128,0.2); border-radius: 3px; overflow: hidden; margin-top: 16px; } .disk-fill { height: 100%; background: var(--p); width: 0%; transition: 0.5s; }
+.versions-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }
+.version-card { display: flex; align-items: center; gap: 16px; padding: 24px; cursor: pointer; transition: 0.2s; border: 1px solid var(--border); } .version-card:hover { border-color: var(--p); transform: translateY(-3px); }
+.v-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.4rem; }
+.v-info h3 { font-size: 1.1rem; margin-bottom: 4px; } .v-info p { font-size: 0.8rem; color: var(--muted); }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 100; display: flex; justify-content: center; align-items: center; }
+.modal { width: 80%; max-width: 900px; height: 80vh; background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; display: flex; flex-direction: column; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+#ace-editor { flex: 1; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+.version-grid { padding: 24px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; flex: 1; }
+.version-item { background: var(--glass); padding: 16px; border-radius: 10px; text-align: center; cursor: pointer; border: 1px solid var(--border); transition: 0.1s; } .version-item:hover { border-color: var(--p); }
+.search-input { width: 100%; padding: 14px; background: var(--glass); border: 1px solid var(--border); color: var(--txt); border-radius: 10px; font-size: 1rem; outline: none; }
+.mod-search { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 16px; align-items: center; }
+.btn { border: none; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 0.9rem; transition: 0.2s; } .btn-primary { background: var(--p); color: white; } .btn-ghost { background: transparent; color: var(--muted); }
+.cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 24px; overflow-y: auto; }
+.cfg-in { width: 100%; background: var(--glass); border: 1px solid var(--border); padding: 10px; color: var(--txt); border-radius: 6px; font-family: 'JetBrains Mono'; }
+</style>
+EOF
 
-// Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, max: 100, message: 'Demasiadas peticiones, intenta más tarde'
-});
-app.use('/api/', limiter);
+# --- APP.JS (Con función manualUpdateCheck) ---
+cat <<'EOF' > /opt/aetherpanel/public/app.js
+const socket = io();
+let currentPath = '', currentFile = '', allVersions = [];
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'nebula_secret_change_this';
+// THEMES
+function setTheme(mode) { localStorage.setItem('theme', mode); updateThemeUI(mode); }
+function updateThemeUI(mode) {
+    let apply = mode; if(mode==='auto') apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light';
+    document.documentElement.setAttribute('data-theme', apply);
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.theme-btn[onclick="setTheme('${mode}')"]`);
+    if(btn) btn.classList.add('active');
+}
+updateThemeUI(localStorage.getItem('theme') || 'dark');
 
-// INSTANCIAS
-const mcManager = new MCServerManager(io);
-const updater = new Updater();
-
-// MULTER (Aún usa la carpeta principal de uploads, debe actualizarse para uploads por servidor)
-const storageFile = multer.diskStorage({
-    destination: (req, f, cb) => {
-        const serverId = req.params.serverId;
-        if (!serverId || !mcManager.instances[serverId]) {
-            return cb(new Error('Invalid Server ID'), false);
-        }
-        cb(null, mcManager.instances[serverId].basePath);
-    },
-    filename: (req, f, cb) => cb(null, f.originalname)
-});
-const uploadFile = multer({ 
-    storage: storageFile,
-    limits: { fileSize: 500 * 1024 * 1024 } 
-});
-
-// AUTENTICACIÓN MEJORADA
-const auth = async (req, res, next) => {
-    const token = req.headers['x-auth'];
-    const cfg = mcManager.getPanelConfig();
-   
-    if(!cfg.password || cfg.password === '') return next();
-   
-    try {
-        if(token && token.startsWith('Bearer ')) {
-            const decoded = jwt.verify(token.split(' ')[1], JWT_SECRET);
-            req.user = decoded;
-            return next();
-        }
-       
-        if(token === cfg.password) return next();
-       
-        res.status(403).json({ error: 'Forbidden' });
-    } catch(e) {
-        res.status(403).json({ error: 'Invalid token' });
-    }
-};
-
-// === RUTAS GENERALES DEL PANEL ===
-
-// AUTH & SESSION
-app.post('/api/login', async (req, res) => {
-    const cfg = mcManager.getPanelConfig();
-    const { password } = req.body;
-   
-    if(!cfg.password || cfg.password === password) {
-        const token = jwt.sign({ user: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
-        res.json({ success: true, token });
-    } else {
-        res.status(403).json({ error: 'Invalid password' });
-    }
-});
-
-app.get('/api/stats', async (req, res) => res.json(await mcManager.getPerformance()));
-
-app.get('/api/versions/:type', async (req, res) => {
-    try {
-        res.json(await mcManager.fetchVersions(req.params.type));
-    } catch(e) {
-        res.status(500).json([]);
-    }
-});
-
-// LABS & UPDATE
-app.get('/api/labs/info', (req, res) => res.json(mcManager.getPanelConfig()));
-
-app.post('/api/labs/set-auth', auth, async (req, res) => {
-    const hashedPassword = await bcrypt.hash(req.body.password, 10);
-    mcManager.setLabsAuth(hashedPassword);
-    res.json({ success: true });
-});
-
-app.post('/api/labs/wipe-all', auth, async (req, res) => {
-    // Implementar lógica de wipe total si es necesario
-    res.status(501).json({ error: 'Not Implemented' });
-});
-
-app.get('/api/update/check', async (req, res) => { res.json(await updater.check()); });
-
-app.post('/api/update/pull', auth, async (req, res) => {
-    try {
-        await updater.pull();
-        res.json({ success: true });
-        setTimeout(() => process.exit(0), 1000);
-    } catch(e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-
-// === RUTAS MULTI-SERVIDOR ===
-
-// GESTIÓN DE SERVIDORES
-app.get('/api/servers', (req, res) => res.json(mcManager.listServers()));
-
-app.post('/api/servers/create', auth, async (req, res) => {
-    try {
-        const newServer = await mcManager.createServer(req.body.id, req.body.config);
-        res.json(newServer);
-    } catch(e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/servers/:serverId/delete', auth, async (req, res) => {
-    try {
-        await mcManager.deleteServer(req.params.serverId);
-        res.json({ success: true });
-    } catch(e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// CORE SERVER
-app.get('/api/servers/:serverId/status', (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).getStatus());
-    } catch(e) {
-        res.status(404).json({ error: e.message });
-    }
-});
-
-app.post('/api/servers/:serverId/power/:action', auth, async (req, res) => {
-    try {
-        const instance = mcManager.getInstance(req.params.serverId);
-        if(instance[req.params.action]) {
-            await instance[req.params.action]();
-            res.json({ success: true });
+// UPDATER (Manual Trigger)
+function manualUpdateCheck() {
+    Toastify({text:'Buscando actualizaciones...', style:{background: 'var(--p)'}}).showToast();
+    fetch('/api/update/check').then(r=>r.json()).then(d=>{
+        if(d.update) {
+            document.getElementById('update-text').innerText = `Versión instalada: ${d.local}\nNueva versión: ${d.remote}`;
+            document.getElementById('update-modal').style.display='flex';
         } else {
-            res.status(400).json({ error: 'Invalid action' });
+            Toastify({text:'Sistema actualizado (V1.1)', style:{background:'#10b981'}}).showToast();
         }
-    } catch(e) {
-        res.status(500).json({ error: e.message });
+    }).catch(()=>Toastify({text:'Error conectando con GitHub', style:{background:'#ef4444'}}).showToast());
+}
+
+// UPDATER (Auto Check Silent)
+fetch('/api/update/check').then(r=>r.json()).then(d=>{
+    if(d.update) {
+        document.getElementById('update-text').innerText = `Versión instalada: ${d.local}\nNueva versión: ${d.remote}`;
+        document.getElementById('update-modal').style.display='flex';
     }
 });
 
-// CONFIG & INSTALL
-app.get('/api/servers/:serverId/config', (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).config);
-    } catch(e) { res.status(404).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/config', auth, (req, res) => {
-    try {
-        mcManager.getInstance(req.params.serverId).saveConfig(req.body);
-        res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/game-settings', auth, (req, res) => {
-    try {
-        mcManager.getInstance(req.params.serverId).updateServerProperties(req.body);
-        res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/install', auth, async (req, res) => {
-    try {
-        const instance = mcManager.getInstance(req.params.serverId);
-        await instance.installJar(req.body); // Asumiendo que installJar se mueve a ServerInstance
-        res.json({ success: true });
-    } catch(e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-
-// MARKETPLACE (Delegación a instancia)
-app.get('/api/servers/:serverId/market/search', async (req, res) => {
-    try {
-        const instance = mcManager.getInstance(req.params.serverId);
-        const { q, loader, source } = req.query;
-        res.json(await instance.market.search(q, loader || 'paper', source || 'modrinth'));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/market/install', auth, async (req, res) => {
-    try {
-        const instance = mcManager.getInstance(req.params.serverId);
-        await instance.market.install(req.body.id, req.body.filename, req.body.source || 'modrinth');
-        res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// WORLDS & BACKUPS
-app.post('/api/servers/:serverId/worlds/reset', auth, (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).worlds.resetDimension(req.body.dim));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/servers/:serverId/backups/list', (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).worlds.listBackups());
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/backups/create', auth, async (req, res) => {
-    try {
-        res.json(await mcManager.getInstance(req.params.serverId).createBackup(req.body.name));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/backups/restore', auth, async (req, res) => {
-    try {
-        res.json(await mcManager.getInstance(req.params.serverId).restoreBackup(req.body.filename));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// SCHEDULER
-app.get('/api/servers/:serverId/scheduler/list', (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).scheduler.listTasks());
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/scheduler/add', auth, (req, res) => {
-    try {
-        const { name, cron, action, data } = req.body;
-        res.json(mcManager.getInstance(req.params.serverId).scheduler.addTask(name, cron, action, data));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/servers/:serverId/scheduler/remove', auth, (req, res) => {
-    try {
-        res.json(mcManager.getInstance(req.params.serverId).scheduler.removeTask(req.body.name));
-    } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-
-// FILES
-app.post('/api/servers/:serverId/upload', auth, uploadFile.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ success: true, filename: req.file.filename });
-});
-
-// ... (Otras rutas de archivos, asumen la misma estructura con :serverId)
-
-// WEBSOCKET
-io.on('connection', (socket) => {
-    
-    socket.on('subscribe_logs', (serverId) => {
-        socket.join(serverId); // Unir el socket a una "sala" del servidor
-        const instance = mcManager.instances[serverId];
-        if (instance) {
-            socket.emit('logs', instance.logs); // Enviar logs recientes
-        }
+function updateSystem(when) {
+    fetch('/api/update/schedule', {
+        method: 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({when})
+    }).then(r=>r.json()).then(d=>{
+        document.getElementById('update-modal').style.display='none';
+        Toastify({text: d.msg, duration:5000, style:{background:'#f59e0b'}}).showToast();
     });
+}
 
-    socket.on('command', ({ serverId, cmd }) => {
-        const instance = mcManager.instances[serverId];
-        if (instance) {
-            instance.sendCommand(cmd);
-        }
-    });
-   
-    // El 'subscribe_stats' global (CPU/MEM) se mantiene
-    socket.on('subscribe_stats', () => {
-        const interval = setInterval(async () => {
-            const stats = await mcManager.getPerformance();
-            socket.emit('stats_update', stats);
-        }, 2000);
-       
-        socket.on('disconnect', () => clearInterval(interval));
-    });
-});
+// CHARTS
+const createChart = (ctx, color) => new Chart(ctx, { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ data: Array(20).fill(0), borderColor: color, backgroundColor: color+'15', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { min: 0, grid: { display: false } } }, plugins: { legend: { display: false } } } });
+const cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), '#8b5cf6');
+const ramChart = createChart(document.getElementById('ramChart').getContext('2d'), '#3b82f6');
+setInterval(() => { fetch('/api/stats').then(r => r.json()).then(d => { cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(d.cpu); cpuChart.update(); document.getElementById('cpu-val').innerText = d.cpu.toFixed(1) + '%'; ramChart.data.datasets[0].data.shift(); ramChart.data.datasets[0].data.push(d.ram_used); ramChart.options.scales.y.max = d.ram_total; ramChart.update(); document.getElementById('ram-val').innerText = `${d.ram_used.toFixed(0)} MB`; document.getElementById('disk-val').innerText = d.disk_used.toFixed(0) + ' MB'; document.getElementById('disk-fill').style.width = Math.min((d.disk_used/d.disk_total)*100, 100) + '%'; }).catch(()=>{}); }, 1000);
 
-server.listen(3000, () => {
-    console.log('╔═══════════════════════════════════════╗');
-    console.log('║  NEBULA v2.0 MULTI-SERVER EDITION    ║');
-    console.log('║  Panel: http://' + (process.env.IP || 'localhost') + ':3000      ║');
-    console.log('╚═══════════════════════════════════════╝');
-});
-SERVERJS
+const term = new Terminal({ fontFamily: 'JetBrains Mono', theme: { background: '#00000000' }, fontSize: 13 });
+const fitAddon = new FitAddon.FitAddon(); term.loadAddon(fitAddon); term.open(document.getElementById('terminal'));
+window.onresize = () => { if(document.getElementById('tab-console').classList.contains('active')) fitAddon.fit(); };
+term.onData(d => socket.emit('command', d));
+socket.on('console_data', d => term.write(d));
+socket.on('logs_history', d => { term.write(d); setTimeout(()=>fitAddon.fit(), 200); });
+socket.on('status_change', s => { document.getElementById('status-widget').className = 'status-widget '+s; document.getElementById('status-text').innerText = s; });
+socket.on('toast', d => Toastify({text: d.msg, duration: 3000, style: {background: d.type==='error'?'#ef4444':d.type==='success'?'#10b981':'#3b82f6'}}).showToast());
 
-# 9. INSTALACIÓN FINAL Y PM2
-log_info "[9/9] Instalando dependencias de Node.js y configurando servicio..."
+function setTab(t, btn) { document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(e => e.classList.remove('active')); document.getElementById('tab-'+t).classList.add('active'); if(btn) btn.classList.add('active'); if(t==='console') setTimeout(()=>fitAddon.fit(), 100); if(t==='files') loadFileBrowser(''); if(t==='config') loadCfg(); if(t==='backups') loadBackups(); }
+function api(ep, body) { return fetch('/api/'+ep, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }).then(r => r.json()); }
 
-# Reasignar permisos antes de npm install para el usuario correcto
-chown -R "$PANEL_USER":"$PANEL_USER" /opt/aetherpanel
-export NVM_DIR="$HOME/.nvm" # Asegurar entorno de node
+async function loadVersions(type) {
+    const m = document.getElementById('version-modal'); m.style.display='flex'; document.getElementById('version-list').innerHTML=''; document.getElementById('loading-text').style.display='inline';
+    try { allVersions = await api('nebula/versions', { type }); renderVersions(allVersions); } catch(e) { Toastify({text:'API Error', style:{background:'#ef4444'}}).showToast(); }
+    document.getElementById('loading-text').style.display='none';
+}
+function renderVersions(list) { const g = document.getElementById('version-list'); g.innerHTML=''; list.forEach(v => { const e = document.createElement('div'); e.className='version-item'; e.innerHTML = `<h4>${v.id}</h4><span>${v.type}</span>`; e.onclick = () => installVersion(v); g.appendChild(e); }); }
+document.getElementById('version-search').oninput = (e) => { const t = e.target.value.toLowerCase(); renderVersions(allVersions.filter(v => v.id.toLowerCase().includes(t))); };
+async function installVersion(v) {
+    if(!confirm(`Instalar ${v.type} ${v.id}?`)) return; document.getElementById('version-modal').style.display='none'; let url = '';
+    try {
+        if(v.type === 'vanilla') { const res = await api('nebula/resolve-vanilla', { url: v.url }); url = res.url; }
+        else if (v.type === 'paper') { const r = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${v.id}`); const d = await r.json(); url = `https://api.papermc.io/v2/projects/paper/versions/${v.id}/builds/${d.builds[d.builds.length-1]}/downloads/paper-${v.id}-${d.builds[d.builds.length-1]}.jar`; }
+        else if (v.type === 'fabric') { const r = await fetch('https://meta.fabricmc.net/v2/versions/loader'); const d = await r.json(); url = `https://meta.fabricmc.net/v2/versions/loader/${v.id}/${d[0].version}/1.0.0/server/jar`; }
+        else if (v.type === 'forge') { url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v.id}-${v.id}/forge-${v.id}-${v.id}-universal.jar`; Toastify({text:'Intentando descarga directa...', style:{background:'#f39c12'}}).showToast(); }
+        if(url) api('install', { url, filename: 'server.jar' });
+    } catch(e) { Toastify({text:'Error Link', style:{background:'#ef4444'}}).showToast(); }
+}
+function loadFileBrowser(p) { currentPath=p; document.getElementById('file-breadcrumb').innerText='/root'+(p?'/'+p:''); api('files?path='+encodeURIComponent(p)).then(files=>{ const l=document.getElementById('file-list'); l.innerHTML=''; if(p){const b=document.createElement('div');b.className='file-row';b.innerHTML='<span>..</span>';b.onclick=()=>{const a=p.split('/');a.pop();loadFileBrowser(a.join('/'))};l.appendChild(b)} files.forEach(f=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span><i class="fa-solid ${f.isDir?'fa-folder':'fa-file'}" style="color:${f.isDir?'var(--p)':'var(--muted)'}"></i> ${f.name}</span><span>${f.size}</span>`;if(f.isDir)e.onclick=()=>loadFileBrowser((p?p+'/':'')+f.name);else e.onclick=()=>openEditor((p?p+'/':'')+f.name);l.appendChild(e)}) }) }
+function uploadFile() { const i=document.createElement('input');i.type='file';i.onchange=(e)=>{const f=new FormData();f.append('file',e.target.files[0]);fetch('/api/files/upload',{method:'POST',body:f}).then(r=>r.json()).then(d=>{if(d.success)loadFileBrowser(currentPath)})};i.click() }
+const ed=ace.edit("ace-editor");ed.setTheme("ace/theme/dracula");ed.setOptions({fontSize:"14px"});
+function openEditor(f){currentFile=f;api('files/read',{file:f}).then(d=>{if(!d.error){document.getElementById('editor-modal').style.display='flex';ed.setValue(d.content,-1);ed.session.setMode("ace/mode/"+(f.endsWith('.json')?'json':'properties'))}})}
+function saveFile(){api('files/save',{file:currentFile,content:ed.getValue()}).then(()=>{document.getElementById('editor-modal').style.display='none'})}
+function closeEditor(){document.getElementById('editor-modal').style.display='none'}
+function loadBackups(){api('backups').then(b=>{const l=document.getElementById('backup-list');l.innerHTML='';b.forEach(k=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span>${k.name}</span><div><button class="btn btn-sm" onclick="restoreBackup('${k.name}')">Restaurar</button><button class="btn btn-sm stop" onclick="deleteBackup('${k.name}')">X</button></div>`;l.appendChild(e)})})}
+function createBackup(){api('backups/create').then(()=>setTimeout(loadBackups,2000))}
+function deleteBackup(n){if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups)}
+function restoreBackup(n){if(confirm('¿Restaurar?'))api('backups/restore',{name:n})}
+function loadCfg(){api('config').then(d=>{const c=document.getElementById('cfg-list');c.innerHTML='';for(const[k,v]of Object.entries(d))c.innerHTML+=`<div><label style="font-size:11px;color:var(--p)">${k}</label><input class="cfg-in" data-k="${k}" value="${v}"></div>`})}
+function saveCfg(){const d={};document.querySelectorAll('.cfg-in').forEach(i=>d[i.dataset.k]=i.value);api('config',d)}
+EOF
 
-# Ejecutar npm install como el usuario del panel
-if ! su - "$PANEL_USER" -c "cd /opt/aetherpanel && npm install --silent"; then
-    log_error "Error al instalar las dependencias de Node.js."
-fi
-
-# Instalar PM2 globalmente (como root)
-if ! npm install -g pm2 > /dev/null 2>&1; then
-    log_error "Error al instalar PM2."
-fi
-
-# Iniciar y configurar PM2 (como el usuario del panel)
-PM2_START_CMD="pm2 start /opt/aetherpanel/server.js --name \"nebula-panel\" --user \"${PANEL_USER}\" --log-date-format \"YYYY-MM-DD HH:mm:ss\""
-su - "$PANEL_USER" -c "$PM2_START_CMD" > /dev/null 2>&1
-pm2 save > /dev/null 2>&1
-pm2 startup systemd -u "$PANEL_USER" --hp /home/"$PANEL_USER" > /dev/null
-pm2 save > /dev/null 2>&1
-
-log_success "Instalación de Aether Nebula completada. Panel iniciado."
-
-IP=$(hostname -I | awk '{print $1}' | head -n 1)
-
-echo -e "${GREEN}================================================================${NC}"
-echo -e "${VIOLET}  ✨ NEBULA v2.1 MULTI-SERVER EDITION - INSTALACIÓN EXITOSA   ${NC}"
-echo -e "${GREEN}================================================================${NC}"
-echo -e "${CYAN}   Panel Web: ${BLUE}http://${IP}:3000${NC}"
-echo -e "${CYAN}   Estado: ${GREEN}pm2 status${NC}"
-echo -e "${MAGENTA}El panel se ejecuta bajo el usuario ${PANEL_USER}.${NC}"
+# ============================================================
+# 2. REINICIAR
+# ============================================================
+echo -e "${GREEN}[2/2] 🔄 Aplicando cambios...${NC}"
+systemctl restart aetherpanel
+IP=$(hostname -I | awk '{print $1}')
+echo -e "${CYAN}==========================================${NC}"
+echo -e "${CYAN}🌌 NEBULA V1.1 LISTO: http://${IP}:3000${NC}"
+echo -e "${CYAN}==========================================${NC}"
