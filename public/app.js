@@ -1,3 +1,9 @@
+fetch('/api/info').then(r=>r.json()).then(d => {
+    // Actualiza el badge del header
+    document.getElementById('header-version').innerText = 'V' + d.version;
+    // Actualiza el texto de la sidebar (NUEVO)
+    document.getElementById('sidebar-version-text').innerText = 'V' + d.version;
+});
 const socket = io();
 let currentPath = '', currentFile = '', allVersions = [];
 
