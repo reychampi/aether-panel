@@ -1,7 +1,3 @@
-¡Absolutamente\! El script que has compartido es la base para una plataforma de gestión de servidores de Minecraft muy potente y bien estructurada. Aquí tienes un manual en formato Markdown, perfecto para tu página de GitHub, que explica las **características principales** y la **arquitectura** de **Aether Nebula v2.0 - Multi-Server Edition**.
-
------
-
 # 🌌 Aether Nebula v2.0 - Multi-Server Edition
 
 El **Aether Nebula Panel** es una plataforma de gestión de servidores de Minecraft de última generación, diseñada para la administración **multi-instancia** en un entorno Node.js robusto. Permite la gestión dinámica de recursos, seguridad y tareas programadas para múltiples servidores alojados en una única máquina.
