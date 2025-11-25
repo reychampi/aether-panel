@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.3.0 (LOGO FIX)
-# - Updater ahora protege y organiza logo.svg y logo.png/ico
-# - Mantiene todas las funcionalidades de la V1.3.0
+# NEBULA PANEL - V1.3.5 (FAIL-SAFE EDITION)
+# - Sistema de Rollback Automático: Si la update falla, vuelve atrás sola.
+# - Sincronización Visual: Fuerza la actualización de HTML/CSS/Logos.
 # ============================================================
 clear
 set -e
@@ -12,13 +12,15 @@ set -e
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.3.0 (LOGO SUPPORT)...${NC}"
+echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.3.5 (CON AUTO-ROLLBACK)...${NC}"
 
 # ============================================================
 # 1. PREPARACIÓN
 # ============================================================
+# Auto-Sync Hora
 CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
 if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
@@ -28,65 +30,74 @@ rm -rf /opt/aetherpanel
 mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 
 # ============================================================
-# 2. EL SCRIPT DE ACTUALIZACIÓN (CON PROTECCIÓN DE LOGOS)
+# 2. GENERADOR DEL UPDATER "FAIL-SAFE"
 # ============================================================
+# Este script se encargará de las actualizaciones futuras.
+# Si algo sale mal, restaura la versión anterior automáticamente.
 cat <<'EOF' > /opt/aetherpanel/updater.sh
 #!/bin/bash
-# Nebula External Updater
 LOG="/opt/aetherpanel/update.log"
+BACKUP_DIR="/opt/aetherpanel_backup_temp"
+APP_DIR="/opt/aetherpanel"
 REPO_ZIP="https://github.com/reychampi/nebula/archive/refs/heads/main.zip"
 
-echo "--- STARTING UPDATE $(date) ---" > $LOG
+echo "--- UPDATE START $(date) ---" > $LOG
 
-# 1. Detener servicio
+# 1. CREAR PUNTO DE RESTAURACIÓN (BACKUP)
+echo "Creating backup snapshot..." >> $LOG
+rm -rf $BACKUP_DIR
+cp -r $APP_DIR $BACKUP_DIR
+
+# 2. DESCARGAR NUEVA VERSIÓN
+echo "Downloading update..." >> $LOG
+rm -rf /tmp/nebula_update /tmp/update.zip
+mkdir -p /tmp/nebula_update
+wget -q $REPO_ZIP -O /tmp/update.zip
+unzip -q -o /tmp/update.zip -d /tmp/nebula_update
+
+# Detectar carpeta raíz del ZIP
+EXTRACTED_DIR=$(ls /tmp/nebula_update | head -n 1)
+NEW_FILES="/tmp/nebula_update/$EXTRACTED_DIR"
+
+# 3. APLICAR ACTUALIZACIÓN
+echo "Applying files..." >> $LOG
 systemctl stop aetherpanel >> $LOG 2>&1
 
-# 2. Limpiar temporales
-rm -rf /tmp/nebula_update /tmp/update.zip >> $LOG 2>&1
-mkdir -p /tmp/nebula_update
+# Copiar todo el contenido nuevo sobre el viejo (incluyendo public/ con logos)
+cp -r $NEW_FILES/* $APP_DIR/ >> $LOG 2>&1
 
-# 3. Descargar
-echo "Downloading repo..." >> $LOG
-wget $REPO_ZIP -O /tmp/update.zip >> $LOG 2>&1
+# Asegurar permisos y dependencias
+chmod +x $APP_DIR/updater.sh
+cd $APP_DIR
+npm install --production >> $LOG 2>&1
 
-# 4. Descomprimir
-unzip -o /tmp/update.zip -d /tmp/nebula_update >> $LOG 2>&1
-
-# 5. Detectar carpeta
-EXTRACTED_DIR=$(ls /tmp/nebula_update | head -n 1)
-
-# 6. Copiar Archivos
-echo "Copying files..." >> $LOG
-cp -r /tmp/nebula_update/$EXTRACTED_DIR/* /opt/aetherpanel/ >> $LOG 2>&1
-
-# 7. ORGANIZACIÓN DE LOGOS (NUEVO)
-# Si los logos están en la raíz, los movemos a public para que la web los vea
-echo "Organizing assets..." >> $LOG
-[ -f /opt/aetherpanel/logo.svg ] && mv /opt/aetherpanel/logo.svg /opt/aetherpanel/public/
-[ -f /opt/aetherpanel/logo.png ] && mv /opt/aetherpanel/logo.png /opt/aetherpanel/public/
-[ -f /opt/aetherpanel/logo.ico ] && mv /opt/aetherpanel/logo.ico /opt/aetherpanel/public/
-
-# 8. LIMPIEZA SEGURA
-# Ya NO borramos *.png ni *.jpg para no perder los logos
-rm -f /opt/aetherpanel/installserver.sh
-rm -f /opt/aetherpanel/README.md
-rm -f /opt/aetherpanel/.gitignore
-
-# 9. Restaurar permisos e instalar
-chmod +x /opt/aetherpanel/updater.sh
-cd /opt/aetherpanel
-npm install >> $LOG 2>&1
-
-# 10. Reiniciar
-echo "Restarting..." >> $LOG
+# 4. PRUEBA DE ARRANQUE (HEALTH CHECK)
+echo "Testing new version..." >> $LOG
 systemctl start aetherpanel >> $LOG 2>&1
-echo "Done." >> $LOG
-EOF
 
+# Esperar 10 segundos y verificar si sigue vivo
+sleep 10
+
+if systemctl is-active --quiet aetherpanel; then
+    echo "✅ UPDATE SUCCESSFUL: System is stable." >> $LOG
+    # Opcional: Borrar backup si todo fue bien
+    # rm -rf $BACKUP_DIR 
+else
+    echo "🚨 UPDATE FAILED: System crashed. ROLLING BACK..." >> $LOG
+    
+    # --- FASE DE ROLLBACK ---
+    systemctl stop aetherpanel
+    rm -rf $APP_DIR/*
+    cp -r $BACKUP_DIR/* $APP_DIR/
+    systemctl start aetherpanel
+    
+    echo "✅ ROLLBACK COMPLETED: Restored previous version." >> $LOG
+fi
+EOF
 chmod +x /opt/aetherpanel/updater.sh
 
 # ============================================================
-# 3. BACKEND
+# 3. BACKEND (SERVER.JS)
 # ============================================================
 
 # --- PACKAGE.JSON ---
@@ -94,7 +105,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
   "version": "1.3.0",
-  "description": "Nebula V1.3",
+  "description": "Nebula V1.3 Stable",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -139,7 +150,7 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.3.0' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 
-// --- INFO API ---
+// --- INFO & UPDATER ---
 app.get('/api/info', (req, res) => {
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -147,129 +158,112 @@ app.get('/api/info', (req, res) => {
     } catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- UPDATER ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json`)).data;
         
+        // 1. Hard Update (Cambio de Versión)
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         }
 
+        // 2. Soft Update (Cambios Visuales HTML/CSS)
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
+        
         for (const f of files) {
             const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
             const localPath = path.join(__dirname, f);
             if (fs.existsSync(localPath)) {
                 const localContent = fs.readFileSync(localPath, 'utf8');
-                if (remoteContent.trim() !== localContent.trim()) {
-                    hasChanges = true;
-                    break;
+                // Normalizar strings para comparar contenido real
+                if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) {
+                    hasChanges = true; break;
                 }
             }
         }
+
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
+
     } catch (e) { res.json({ type: 'error' }); }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     if (type === 'hard') {
-        io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización...' });
+        io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización segura...' });
         const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
         updater.unref();
         res.json({ success: true, mode: 'hard' });
         setTimeout(() => process.exit(0), 1000);
-    } else if (type === 'soft') {
-        io.emit('toast', { type: 'info', msg: '✨ Actualizando interfaz...' });
+    } 
+    else if (type === 'soft') {
+        io.emit('toast', { type: 'info', msg: '🎨 Actualizando visuales...' });
         try {
+            // Descarga forzada de archivos visuales
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
             for (const f of files) {
                 const c = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
-                fs.writeFileSync(path.join(__dirname, f), c);
+                fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
             }
+            // Descargar logos si existen en el repo
+            exec(`wget -q -O /opt/aetherpanel/public/logo.svg ${REPO_RAW}/public/logo.svg`);
+            exec(`wget -q -O /opt/aetherpanel/public/logo.ico ${REPO_RAW}/public/logo.ico`);
+            
             res.json({ success: true, mode: 'soft' });
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
 });
 
-// --- PROXY VERSIONES ---
+// --- API VERSIONES ---
 app.post('/api/nebula/versions', async (req, res) => {
-    const { type } = req.body;
     try {
-        let list = [];
-        if (type === 'vanilla') {
-            const r = await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
-            list = r.data.versions.filter(v => v.type === 'release').map(v => ({ id: v.id, url: v.url, type: 'vanilla' }));
-        } else if (type === 'paper') {
-            const r = await apiClient.get('https://api.papermc.io/v2/projects/paper');
-            list = r.data.versions.reverse().map(v => ({ id: v, type: 'paper' }));
-        } else if (type === 'fabric') {
-            const r = await apiClient.get('https://meta.fabricmc.net/v2/versions/game');
-            list = r.data.filter(v => v.stable).map(v => ({ id: v.version, type: 'fabric' }));
-        } else if (type === 'forge') {
-            const r = await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
-            const p = r.data.promos;
-            const s = new Set();
-            Object.keys(p).forEach(k => { const v = k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v); });
-            list = Array.from(s).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })).map(v => ({ id: v, type: 'forge' }));
+        const t = req.body.type;
+        let l = [];
+        if(t==='vanilla') l = (await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).data.versions.filter(v=>v.type==='release').map(v=>({id:v.id, url:v.url, type:'vanilla'}));
+        else if(t==='paper') l = (await apiClient.get('https://api.papermc.io/v2/projects/paper')).data.versions.reverse().map(v=>({id:v, type:'paper'}));
+        else if(t==='fabric') l = (await apiClient.get('https://meta.fabricmc.net/v2/versions/game')).data.filter(v=>v.stable).map(v=>({id:v.version, type:'fabric'}));
+        else if(t==='forge') {
+            const p = (await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json')).data.promos;
+            const s = new Set(); Object.keys(p).forEach(k=>{const v=k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v)});
+            l = Array.from(s).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true,sensitivity:'base'})).map(v=>({id:v, type:'forge'}));
         }
-        res.json(list);
-    } catch (e) { res.status(500).json({ error: "API Error" }); }
+        res.json(l);
+    } catch(e) { res.status(500).json({error:'API Error'}); }
 });
+app.post('/api/nebula/resolve-vanilla', async (req, res) => { try { res.json({url: (await apiClient.get(req.body.url)).data.downloads.server.url}); } catch(e){res.status(500).json({});} });
 
-app.post('/api/nebula/resolve-vanilla', async (req, res) => {
-    try { const r = await apiClient.get(req.body.url); res.json({ url: r.data.downloads.server.url }); } catch (e) { res.status(500).json({error: 'Error resolving'}); }
-});
-
-// --- MOD INSTALLER API ---
+// --- API MODS ---
 app.post('/api/mods/install', async (req, res) => {
     const { url, name } = req.body;
-    const modsDir = path.join(SERVER_DIR, 'mods');
-    if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir);
-    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
-    const fileName = name.replace(/\s+/g, '_') + '.jar';
-    const target = path.join(modsDir, fileName);
-    exec(`wget -q -O "${target}" "${url}"`, (error) => {
-        if (error) {
-            io.emit('toast', { type: 'error', msg: 'Error al descargar' });
-            res.json({ success: false });
-        } else {
-            io.emit('toast', { type: 'success', msg: 'Instalado' });
-            res.json({ success: true });
-        }
+    const d = path.join(SERVER_DIR, 'mods');
+    if(!fs.existsSync(d)) fs.mkdirSync(d);
+    io.emit('toast', {type:'info', msg:`Instalando ${name}...`});
+    exec(`wget -q -O "${path.join(d, name.replace(/\s+/g,'_')+'.jar')}" "${url}"`, (e)=>{
+        if(e) io.emit('toast',{type:'error', msg:'Error'}); else io.emit('toast',{type:'success', msg:'Instalado'});
     });
+    res.json({success:true});
 });
 
-app.get('/api/stats', (req, res) => {
-    osUtils.cpuUsage((cpu) => {
-        let disk = 0; try { fs.readdirSync(SERVER_DIR).forEach(f => { try { disk += fs.statSync(path.join(SERVER_DIR, f)).size; } catch {} }); } catch {}
-        res.json({ cpu: cpu * 100, ram_used: (os.totalmem()-os.freemem())/1048576, ram_total: os.totalmem()/1048576, disk_used: disk/1048576, disk_total: 20480 });
-    });
-});
+// --- RUTAS CORE ---
+app.get('/api/stats', (req, res) => { osUtils.cpuUsage((c) => { let d = 0; try{fs.readdirSync(SERVER_DIR).forEach(f=>{try{d+=fs.statSync(path.join(SERVER_DIR,f)).size}catch{}})}catch{} res.json({cpu:c*100, ram_used:(os.totalmem()-os.freemem())/1048576, ram_total:os.totalmem()/1048576, disk_used:d/1048576, disk_total:20480}); }); });
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
-app.post('/api/power/:action', async (req, res) => { try{if(mcServer[req.params.action])await mcServer[req.params.action]();res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
+app.post('/api/power/:a', async (req, res) => { try{if(mcServer[req.params.a])await mcServer[req.params.a]();res.json({success:true});}catch(e){res.status(500).json({});}});
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
 app.post('/api/config', (req, res) => { mcServer.writeProperties(req.body); res.json({success:true}); });
-app.post('/api/install', async (req, res) => { try{await mcServer.installJar(req.body.url, req.body.filename);res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
-app.get('/api/files', (req, res) => { const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); if (!fs.existsSync(t)) return res.json([]); res.json(fs.readdirSync(t, {withFileTypes:true}).map(f => ({ name: f.name, isDir: f.isDirectory(), size: f.isDirectory()?'-':(fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'})).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); });
-app.post('/api/files/read', (req, res) => { const p = path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')); if(fs.existsSync(p)) res.json({content:fs.readFileSync(p,'utf8')}); else res.status(404).json({error:'404'}); });
-app.post('/api/files/save', (req, res) => { fs.writeFileSync(path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')), req.body.content); res.json({success:true}); });
-app.post('/api/files/upload', upload.single('file'), (req, res) => { if(req.file) { fs.renameSync(req.file.path, path.join(SERVER_DIR, req.file.originalname)); res.json({success:true}); } else res.json({success:false}); });
-app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'}))); });
+app.post('/api/install', async (req, res) => { try{await mcServer.installJar(req.body.url, req.body.filename);res.json({success:true});}catch(e){res.status(500).json({});}});
+app.get('/api/files', (req, res) => { const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); if(!fs.existsSync(t))return res.json([]); res.json(fs.readdirSync(t,{withFileTypes:true}).map(f=>({name:f.name, isDir:f.isDirectory(), size:f.isDirectory()?'-':(fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'})).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); });
+app.post('/api/files/read', (req, res) => { const p=path.join(SERVER_DIR,req.body.file.replace(/\.\./g,'')); if(fs.existsSync(p))res.json({content:fs.readFileSync(p,'utf8')}); else res.status(404).json({}); });
+app.post('/api/files/save', (req, res) => { fs.writeFileSync(path.join(SERVER_DIR,req.body.file.replace(/\.\./g,'')),req.body.content); res.json({success:true}); });
+app.post('/api/files/upload', upload.single('file'), (req, res) => { if(req.file){fs.renameSync(req.file.path, path.join(SERVER_DIR,req.file.originalname)); res.json({success:true});}else res.json({success:false}); });
+app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR))fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'}))); });
 app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); });
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
 
-io.on('connection', (socket) => {
-    socket.emit('logs_history', mcServer.getRecentLogs());
-    socket.emit('status_change', mcServer.status);
-    socket.on('command', (cmd) => mcServer.sendCommand(cmd));
-});
-
+io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
 server.listen(3000, () => console.log('Nebula V1.3.0 running'));
 EOF
 
@@ -304,9 +298,7 @@ class MCManager {
         this.process = spawn('java', ['-Xmx'+this.ram, '-Xms'+this.ram, '-jar', jar, 'nogui'], { cwd: this.serverPath });
         this.process.stdout.on('data', d => { const s=d.toString(); this.log(s); if(s.includes('Done')||s.includes('For help')) { this.status='ONLINE'; this.io.emit('status_change', this.status); }});
         this.process.stderr.on('data', d => this.log(d.toString()));
-        this.process.on('close', () => { 
-            this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n');
-        });
+        this.process.on('close', () => { this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n'); });
     }
     async stop() { if(this.process && this.status==='ONLINE') { this.status='STOPPING'; this.io.emit('status_change',this.status); this.process.stdin.write('stop\n'); return new Promise(r=>{let c=0;const i=setInterval(()=>{c++;if(this.status==='OFFLINE'||c>20){clearInterval(i);r()}},500)}); }}
     async restart() { await this.stop(); setTimeout(()=>this.start(), 3000); }
@@ -326,10 +318,10 @@ module.exports = MCManager;
 EOF
 
 # ============================================================
-# 3. FRONTEND
+# 4. FRONTEND
 # ============================================================
 
-# --- INDEX.HTML (Con Favicon y Logo SVG) ---
+# --- INDEX.HTML ---
 cat <<'EOF' > /opt/aetherpanel/public/index.html
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
@@ -353,22 +345,11 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 <body>
     <div id="editor-modal" class="modal-overlay" style="display:none"><div class="modal glass"><div class="modal-header"><h3>Editor</h3><div><button class="btn btn-ghost" onclick="closeEditor()">Cerrar</button><button class="btn btn-primary" onclick="saveFile()">Guardar</button></div></div><div id="ace-editor"></div></div></div>
     <div id="version-modal" class="modal-overlay" style="display:none"><div class="modal glass version-modal"><div class="modal-header"><h3><i class="fa-solid fa-cloud"></i> Repositorio</h3><button class="btn btn-ghost" onclick="document.getElementById('version-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div><div class="mod-search"><input type="text" id="version-search" placeholder="Buscar versión..." class="search-input" autofocus><span id="loading-text" style="display:none;font-size:12px;color:var(--p)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span></div><div id="version-list" class="version-grid"></div></div></div>
-    
-    <div id="update-modal" class="modal-overlay" style="display:none">
-        <div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;">
-            <div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div>
-            <h3 id="up-title">Actualización</h3>
-            <p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p>
-            <div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div>
-        </div>
-    </div>
+    <div id="update-modal" class="modal-overlay" style="display:none"><div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;"><div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div><h3 id="up-title">Actualización</h3><p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p><div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div></div></div>
 
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="brand">
-                <div class="brand-logo"><img src="logo.svg" style="width:24px;height:24px"></div>
-                <div class="brand-text"><span id="sidebar-version-text">V1.3.0</span> <span>NEBULA</span></div>
-            </div>
+            <div class="brand"><div class="brand-logo"><img src="logo.svg" style="width:24px;height:24px"></div><div class="brand-text"><span id="sidebar-version-text">V1.3.0</span> <span>NEBULA</span></div></div>
             <nav>
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
@@ -395,14 +376,7 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
                     <button onclick="api('power/kill')" class="btn-control kill"><i class="fa-solid fa-skull-crossbones"></i></button>
                 </div>
             </header>
-
-            <div id="tab-stats" class="tab-content active">
-                <div class="stats-grid">
-                    <div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div>
-                    <div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div>
-                    <div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div>
-                </div>
-            </div>
+            <div id="tab-stats" class="tab-content active"><div class="stats-grid"><div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div></div></div>
             <div id="tab-console" class="tab-content"><div class="console-box glass"><div id="terminal"></div></div></div>
             <div id="tab-files" class="tab-content"><div class="card glass full"><div class="card-header"><div class="breadcrumb" id="file-breadcrumb">/root</div><div><button onclick="loadFileBrowser(currentPath)" class="btn btn-ghost"><i class="fa-solid fa-rotate"></i></button><button onclick="uploadFile()" class="btn btn-primary"><i class="fa-solid fa-upload"></i></button></div></div><div id="file-list" class="file-list"></div></div></div>
             <div id="tab-versions" class="tab-content"><h2 class="tab-title">Núcleos Disponibles</h2><div class="versions-container"><div class="version-card glass" onclick="loadVersions('vanilla')"><div class="v-icon" style="background:#27ae60"><i class="fa-solid fa-cube"></i></div><div class="v-info"><h3>Vanilla</h3><p>Oficial</p></div></div><div class="version-card glass" onclick="loadVersions('paper')"><div class="v-icon" style="background:#2980b9"><i class="fa-solid fa-paper-plane"></i></div><div class="v-info"><h3>Paper</h3><p>Optimizado</p></div></div><div class="version-card glass" onclick="loadVersions('fabric')"><div class="v-icon" style="background:#f39c12"><i class="fa-solid fa-scroll"></i></div><div class="v-info"><h3>Fabric</h3><p>Mods</p></div></div><div class="version-card glass" onclick="loadVersions('forge')"><div class="v-icon" style="background:#c0392b"><i class="fa-solid fa-hammer"></i></div><div class="v-info"><h3>Forge</h3><p>Ilimitado</p></div></div></div></div>
@@ -413,135 +387,6 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
     <script src="app.js"></script>
 </body>
 </html>
-EOF
-
-# --- APP.JS (Con Tienda Mods) ---
-cat <<'EOF' > /opt/aetherpanel/public/app.js
-const socket = io();
-let currentPath = '', currentFile = '', allVersions = [];
-
-// GET VERSION INFO
-fetch('/api/info').then(r=>r.json()).then(d => {
-    document.getElementById('sidebar-version-text').innerText = 'V' + d.version;
-    document.getElementById('header-version').innerText = 'V' + d.version;
-});
-
-function setTheme(mode) { localStorage.setItem('theme', mode); updateThemeUI(mode); }
-function updateThemeUI(mode) {
-    let apply = mode; if(mode==='auto') apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light';
-    document.documentElement.setAttribute('data-theme', apply);
-    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
-    const btn = document.querySelector(`.theme-btn[onclick="setTheme('${mode}')"]`);
-    if(btn) btn.classList.add('active');
-}
-updateThemeUI(localStorage.getItem('theme') || 'dark');
-
-// UPDATER
-checkUpdate(true);
-function checkUpdate(isAuto=false) {
-    if(!isAuto) Toastify({text:'Buscando...', style:{background:'var(--p)'}}).showToast();
-    fetch('/api/update/check').then(r=>r.json()).then(d => {
-        if(d.type !== 'none') showUpdateModal(d);
-        else if(!isAuto) Toastify({text:'Sistema actualizado', style:{background:'#10b981'}}).showToast();
-    });
-}
-function showUpdateModal(d) {
-    const m = document.getElementById('update-modal');
-    const t = document.getElementById('update-text');
-    const a = document.getElementById('up-actions');
-    const ti = document.getElementById('up-title');
-    
-    if(d.type === 'hard') {
-        ti.innerText = "Actualización Mayor";
-        t.innerText = `Versión local: ${d.local}\nNueva versión: ${d.remote}\n\nSe requiere reinicio.`;
-        a.innerHTML = `<button onclick="doUpdate('hard')" class="btn btn-primary">ACTUALIZAR</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
-        m.style.display='flex';
-    } else if(d.type === 'soft') {
-        ti.innerText = "Mejora Visual";
-        t.innerText = `Cambios visuales detectados.`;
-        a.innerHTML = `<button onclick="doUpdate('soft')" class="btn" style="background:#10b981;color:white">APLICAR HOTFIX</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
-        m.style.display='flex';
-    }
-}
-function doUpdate(type) {
-    document.getElementById('update-modal').style.display='none';
-    fetch('/api/update/perform', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})}).then(r=>r.json()).then(d=>{
-        if(d.mode === 'soft') { Toastify({text:'Aplicado. Recargando...', style:{background:'#10b981'}}).showToast(); setTimeout(()=>location.reload(), 1500); }
-        if(d.mode === 'hard') { Toastify({text:'Reiniciando sistema...', style:{background:'#f59e0b'}}).showToast(); setTimeout(()=>location.reload(), 8000); }
-    });
-}
-
-// MODS STORE
-const modsDB = [
-    { name: "Jei (Just Enough Items)", url: "https://mediafilez.forgecdn.net/files/5936/206/jei-1.20.1-forge-15.3.0.4.jar", icon: "fa-book" },
-    { name: "Iron Chests", url: "https://mediafilez.forgecdn.net/files/4670/664/ironchest-1.20.1-14.4.4.jar", icon: "fa-box" },
-    { name: "JourneyMap", url: "https://mediafilez.forgecdn.net/files/5864/381/journeymap-1.20.1-5.9.18-forge.jar", icon: "fa-map" },
-    { name: "Nature's Compass", url: "https://mediafilez.forgecdn.net/files/4682/937/NaturesCompass-1.20.1-1.11.2-forge.jar", icon: "fa-compass" },
-    { name: "Clumps", url: "https://mediafilez.forgecdn.net/files/4603/862/Clumps-forge-1.20.1-12.0.0.3.jar", icon: "fa-users" }
-];
-
-function openModStore() {
-    const m = document.getElementById('version-modal'); m.style.display='flex'; 
-    document.getElementById('version-list').innerHTML=''; 
-    m.querySelector('h3').innerHTML='<i class="fa-solid fa-puzzle-piece"></i> Tienda Mods';
-    document.getElementById('loading-text').style.display='none';
-    modsDB.forEach(mod => {
-        const el = document.createElement('div'); el.className='version-item';
-        el.innerHTML=`<div style="display:flex;gap:10px;justify-content:center;align-items:center"><i class="fa-solid ${mod.icon}" style="color:var(--p)"></i> ${mod.name}</div>`;
-        el.onclick=()=>{if(confirm(`Instalar ${mod.name}?`)) api('mods/install', {url:mod.url, name:mod.name}); m.style.display='none';};
-        document.getElementById('version-list').appendChild(el);
-    });
-}
-
-// OTHERS
-const createChart = (ctx, color) => new Chart(ctx, { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ data: Array(20).fill(0), borderColor: color, backgroundColor: color+'15', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { min: 0, grid: { display: false } } }, plugins: { legend: { display: false } } } });
-const cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), '#8b5cf6');
-const ramChart = createChart(document.getElementById('ramChart').getContext('2d'), '#3b82f6');
-setInterval(() => { fetch('/api/stats').then(r => r.json()).then(d => { cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(d.cpu); cpuChart.update(); document.getElementById('cpu-val').innerText = d.cpu.toFixed(1) + '%'; ramChart.data.datasets[0].data.shift(); ramChart.data.datasets[0].data.push(d.ram_used); ramChart.options.scales.y.max = d.ram_total; ramChart.update(); document.getElementById('ram-val').innerText = `${d.ram_used.toFixed(0)} MB`; document.getElementById('disk-val').innerText = d.disk_used.toFixed(0) + ' MB'; document.getElementById('disk-fill').style.width = Math.min((d.disk_used/d.disk_total)*100, 100) + '%'; }).catch(()=>{}); }, 1000);
-
-const term = new Terminal({ fontFamily: 'JetBrains Mono', theme: { background: '#00000000' }, fontSize: 13 });
-const fitAddon = new FitAddon.FitAddon(); term.loadAddon(fitAddon); term.open(document.getElementById('terminal'));
-window.onresize = () => { if(document.getElementById('tab-console').classList.contains('active')) fitAddon.fit(); };
-term.onData(d => socket.emit('command', d));
-socket.on('console_data', d => term.write(d));
-socket.on('logs_history', d => { term.write(d); setTimeout(()=>fitAddon.fit(), 200); });
-socket.on('status_change', s => { document.getElementById('status-widget').className = 'status-widget '+s; document.getElementById('status-text').innerText = s; });
-socket.on('toast', d => Toastify({text: d.msg, duration: 3000, style: {background: d.type==='error'?'#ef4444':d.type==='success'?'#10b981':'#3b82f6'}}).showToast());
-
-function setTab(t, btn) { document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(e => e.classList.remove('active')); document.getElementById('tab-'+t).classList.add('active'); if(btn) btn.classList.add('active'); if(t==='console') setTimeout(()=>fitAddon.fit(), 100); if(t==='files') loadFileBrowser(''); if(t==='config') loadCfg(); if(t==='backups') loadBackups(); }
-function api(ep, body) { return fetch('/api/'+ep, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }).then(r => r.json()); }
-
-async function loadVersions(type) {
-    const m = document.getElementById('version-modal'); m.style.display='flex'; document.getElementById('version-list').innerHTML=''; 
-    m.querySelector('h3').innerHTML='<i class="fa-solid fa-cloud"></i> Repositorio';
-    document.getElementById('loading-text').style.display='inline';
-    try { allVersions = await api('nebula/versions', { type }); renderVersions(allVersions); } catch(e) { Toastify({text:'API Error', style:{background:'#ef4444'}}).showToast(); }
-    document.getElementById('loading-text').style.display='none';
-}
-function renderVersions(list) { const g = document.getElementById('version-list'); g.innerHTML=''; list.forEach(v => { const e = document.createElement('div'); e.className='version-item'; e.innerHTML = `<h4>${v.id}</h4><span>${v.type}</span>`; e.onclick = () => installVersion(v); g.appendChild(e); }); }
-document.getElementById('version-search').oninput = (e) => { const t = e.target.value.toLowerCase(); renderVersions(allVersions.filter(v => v.id.toLowerCase().includes(t))); };
-async function installVersion(v) {
-    if(!confirm(`Instalar ${v.type} ${v.id}?`)) return; document.getElementById('version-modal').style.display='none'; let url = '';
-    try {
-        if(v.type === 'vanilla') { const res = await api('nebula/resolve-vanilla', { url: v.url }); url = res.url; }
-        else if (v.type === 'paper') { const r = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${v.id}`); const d = await r.json(); url = `https://api.papermc.io/v2/projects/paper/versions/${v.id}/builds/${d.builds[d.builds.length-1]}/downloads/paper-${v.id}-${d.builds[d.builds.length-1]}.jar`; }
-        else if (v.type === 'fabric') { const r = await fetch('https://meta.fabricmc.net/v2/versions/loader'); const d = await r.json(); url = `https://meta.fabricmc.net/v2/versions/loader/${v.id}/${d[0].version}/1.0.0/server/jar`; }
-        else if (v.type === 'forge') { url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v.id}-${v.id}/forge-${v.id}-${v.id}-universal.jar`; }
-        if(url) api('install', { url, filename: 'server.jar' });
-    } catch(e) { Toastify({text:'Error Link', style:{background:'#ef4444'}}).showToast(); }
-}
-function loadFileBrowser(p) { currentPath=p; document.getElementById('file-breadcrumb').innerText='/root'+(p?'/'+p:''); api('files?path='+encodeURIComponent(p)).then(files=>{ const l=document.getElementById('file-list'); l.innerHTML=''; if(p){const b=document.createElement('div');b.className='file-row';b.innerHTML='<span>..</span>';b.onclick=()=>{const a=p.split('/');a.pop();loadFileBrowser(a.join('/'))};l.appendChild(b)} files.forEach(f=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span><i class="fa-solid ${f.isDir?'fa-folder':'fa-file'}" style="color:${f.isDir?'var(--p)':'var(--muted)'}"></i> ${f.name}</span><span>${f.size}</span>`;if(f.isDir)e.onclick=()=>loadFileBrowser((p?p+'/':'')+f.name);else e.onclick=()=>openEditor((p?p+'/':'')+f.name);l.appendChild(e)}) }) }
-function uploadFile() { const i=document.createElement('input');i.type='file';i.onchange=(e)=>{const f=new FormData();f.append('file',e.target.files[0]);fetch('/api/files/upload',{method:'POST',body:f}).then(r=>r.json()).then(d=>{if(d.success)loadFileBrowser(currentPath)})};i.click() }
-const ed=ace.edit("ace-editor");ed.setTheme("ace/theme/dracula");ed.setOptions({fontSize:"14px"});
-function openEditor(f){currentFile=f;api('files/read',{file:f}).then(d=>{if(!d.error){document.getElementById('editor-modal').style.display='flex';ed.setValue(d.content,-1);ed.session.setMode("ace/mode/"+(f.endsWith('.json')?'json':'properties'))}})}
-function saveFile(){api('files/save',{file:currentFile,content:ed.getValue()}).then(()=>{document.getElementById('editor-modal').style.display='none'})}
-function closeEditor(){document.getElementById('editor-modal').style.display='none'}
-function loadBackups(){api('backups').then(b=>{const l=document.getElementById('backup-list');l.innerHTML='';b.forEach(k=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span>${k.name}</span><div><button class="btn btn-sm" onclick="restoreBackup('${k.name}')">Restaurar</button><button class="btn btn-sm stop" onclick="deleteBackup('${k.name}')">X</button></div>`;l.appendChild(e)})})}
-function createBackup(){api('backups/create').then(()=>setTimeout(loadBackups,2000))}
-function deleteBackup(n){if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups)}
-function restoreBackup(n){if(confirm('¿Restaurar?'))api('backups/restore',{name:n})}
-function loadCfg(){api('config').then(d=>{const c=document.getElementById('cfg-list');c.innerHTML='';for(const[k,v]of Object.entries(d))c.innerHTML+=`<div><label style="font-size:11px;color:var(--p)">${k}</label><input class="cfg-in" data-k="${k}" value="${v}"></div>`})}
-function saveCfg(){const d={};document.querySelectorAll('.cfg-in').forEach(i=>d[i.dataset.k]=i.value);api('config',d)}
 EOF
 
 # --- STYLE.CSS ---
@@ -593,8 +438,136 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .cfg-in { width: 100%; background: var(--glass); border: 1px solid var(--border); padding: 10px; color: var(--txt); border-radius: 6px; font-family: 'JetBrains Mono'; }
 EOF
 
+# --- APP.JS ---
+cat <<'EOF' > /opt/aetherpanel/public/app.js
+const socket = io();
+let currentPath = '', currentFile = '', allVersions = [];
+
+// INFO
+fetch('/api/info').then(r=>r.json()).then(d => {
+    document.getElementById('sidebar-version-text').innerText = 'V' + d.version;
+    document.getElementById('header-version').innerText = 'V' + d.version;
+});
+
+// THEMES
+function setTheme(mode) { localStorage.setItem('theme', mode); updateThemeUI(mode); }
+function updateThemeUI(mode) {
+    let apply = mode; if(mode==='auto') apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light';
+    document.documentElement.setAttribute('data-theme', apply);
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.theme-btn[onclick="setTheme('${mode}')"]`);
+    if(btn) btn.classList.add('active');
+}
+updateThemeUI(localStorage.getItem('theme') || 'dark');
+
+// UPDATER
+checkUpdate(true);
+function checkUpdate(isAuto=false) {
+    if(!isAuto) Toastify({text:'Buscando...', style:{background:'var(--p)'}}).showToast();
+    fetch('/api/update/check').then(r=>r.json()).then(d => {
+        if(d.type !== 'none') showUpdateModal(d);
+        else if(!isAuto) Toastify({text:'Sistema actualizado', style:{background:'#10b981'}}).showToast();
+    }).catch(e => { if(!isAuto) Toastify({text:'Error GitHub', style:{background:'#ef4444'}}).showToast(); });
+}
+function showUpdateModal(d) {
+    const m = document.getElementById('update-modal');
+    const t = document.getElementById('update-text');
+    const a = document.getElementById('up-actions');
+    const ti = document.getElementById('up-title');
+    if(d.type === 'hard') {
+        ti.innerText = "Actualización Mayor";
+        t.innerText = `Versión local: ${d.local}\nNueva versión: ${d.remote}\n\nSe requiere reinicio.`;
+        a.innerHTML = `<button onclick="doUpdate('hard')" class="btn btn-primary">ACTUALIZAR</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
+        m.style.display='flex';
+    } else if(d.type === 'soft') {
+        ti.innerText = "Mejora Visual";
+        t.innerText = `Cambios visuales detectados.`;
+        a.innerHTML = `<button onclick="doUpdate('soft')" class="btn" style="background:#10b981;color:white">APLICAR HOTFIX</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
+        m.style.display='flex';
+    }
+}
+function doUpdate(type) {
+    document.getElementById('update-modal').style.display='none';
+    fetch('/api/update/perform', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})}).then(r=>r.json()).then(d=>{
+        if(d.mode === 'soft') { Toastify({text:'Aplicado. Recargando...', style:{background:'#10b981'}}).showToast(); setTimeout(()=>location.reload(), 1500); }
+        if(d.mode === 'hard') { Toastify({text:'Reiniciando sistema...', style:{background:'#f59e0b'}}).showToast(); setTimeout(()=>location.reload(), 8000); }
+    });
+}
+
+// MODS STORE
+const modsDB = [
+    { name: "Jei (Just Enough Items)", url: "https://mediafilez.forgecdn.net/files/5936/206/jei-1.20.1-forge-15.3.0.4.jar", icon: "fa-book" },
+    { name: "Iron Chests", url: "https://mediafilez.forgecdn.net/files/4670/664/ironchest-1.20.1-14.4.4.jar", icon: "fa-box" },
+    { name: "JourneyMap", url: "https://mediafilez.forgecdn.net/files/5864/381/journeymap-1.20.1-5.9.18-forge.jar", icon: "fa-map" },
+    { name: "Nature's Compass", url: "https://mediafilez.forgecdn.net/files/4682/937/NaturesCompass-1.20.1-1.11.2-forge.jar", icon: "fa-compass" },
+    { name: "Clumps", url: "https://mediafilez.forgecdn.net/files/4603/862/Clumps-forge-1.20.1-12.0.0.3.jar", icon: "fa-users" }
+];
+function openModStore() {
+    const m = document.getElementById('version-modal'); m.style.display='flex'; 
+    document.getElementById('version-list').innerHTML=''; 
+    m.querySelector('.modal-header h3').innerHTML='<i class="fa-solid fa-puzzle-piece"></i> Tienda Mods';
+    document.getElementById('loading-text').style.display='none';
+    modsDB.forEach(mod => {
+        const el = document.createElement('div'); el.className='version-item';
+        el.innerHTML=`<div style="display:flex;gap:10px;justify-content:center;align-items:center"><i class="fa-solid ${mod.icon}" style="color:var(--p)"></i> ${mod.name}</div>`;
+        el.onclick=()=>{if(confirm(`Instalar ${mod.name}?`)) api('mods/install', {url:mod.url, name:mod.name}); m.style.display='none';};
+        document.getElementById('version-list').appendChild(el);
+    });
+}
+
+// CHARTS & OTHERS
+const createChart = (ctx, color) => new Chart(ctx, { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ data: Array(20).fill(0), borderColor: color, backgroundColor: color+'15', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { min: 0, grid: { display: false } } }, plugins: { legend: { display: false } } } });
+const cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), '#8b5cf6');
+const ramChart = createChart(document.getElementById('ramChart').getContext('2d'), '#3b82f6');
+setInterval(() => { fetch('/api/stats').then(r => r.json()).then(d => { cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(d.cpu); cpuChart.update(); document.getElementById('cpu-val').innerText = d.cpu.toFixed(1) + '%'; ramChart.data.datasets[0].data.shift(); ramChart.data.datasets[0].data.push(d.ram_used); ramChart.options.scales.y.max = d.ram_total; ramChart.update(); document.getElementById('ram-val').innerText = `${d.ram_used.toFixed(0)} MB`; document.getElementById('disk-val').innerText = d.disk_used.toFixed(0) + ' MB'; document.getElementById('disk-fill').style.width = Math.min((d.disk_used/d.disk_total)*100, 100) + '%'; }).catch(()=>{}); }, 1000);
+
+const term = new Terminal({ fontFamily: 'JetBrains Mono', theme: { background: '#00000000' }, fontSize: 13 });
+const fitAddon = new FitAddon.FitAddon(); term.loadAddon(fitAddon); term.open(document.getElementById('terminal'));
+window.onresize = () => { if(document.getElementById('tab-console').classList.contains('active')) fitAddon.fit(); };
+term.onData(d => socket.emit('command', d));
+socket.on('console_data', d => term.write(d));
+socket.on('logs_history', d => { term.write(d); setTimeout(()=>fitAddon.fit(), 200); });
+socket.on('status_change', s => { document.getElementById('status-widget').className = 'status-widget '+s; document.getElementById('status-text').innerText = s; });
+socket.on('toast', d => Toastify({text: d.msg, duration: 3000, style: {background: d.type==='error'?'#ef4444':d.type==='success'?'#10b981':'#3b82f6'}}).showToast());
+
+function setTab(t, btn) { document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(e => e.classList.remove('active')); document.getElementById('tab-'+t).classList.add('active'); if(btn) btn.classList.add('active'); if(t==='console') setTimeout(()=>fitAddon.fit(), 100); if(t==='files') loadFileBrowser(''); if(t==='config') loadCfg(); if(t==='backups') loadBackups(); }
+function api(ep, body) { return fetch('/api/'+ep, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }).then(r => r.json()); }
+
+async function loadVersions(type) {
+    const m = document.getElementById('version-modal'); m.style.display='flex'; document.getElementById('version-list').innerHTML=''; 
+    m.querySelector('.modal-header h3').innerHTML='<i class="fa-solid fa-cloud"></i> Repositorio';
+    document.getElementById('loading-text').style.display='inline';
+    try { allVersions = await api('nebula/versions', { type }); renderVersions(allVersions); } catch(e) { Toastify({text:'API Error', style:{background:'#ef4444'}}).showToast(); }
+    document.getElementById('loading-text').style.display='none';
+}
+function renderVersions(list) { const g = document.getElementById('version-list'); g.innerHTML=''; list.forEach(v => { const e = document.createElement('div'); e.className='version-item'; e.innerHTML = `<h4>${v.id}</h4><span>${v.type}</span>`; e.onclick = () => installVersion(v); g.appendChild(e); }); }
+document.getElementById('version-search').oninput = (e) => { const t = e.target.value.toLowerCase(); renderVersions(allVersions.filter(v => v.id.toLowerCase().includes(t))); };
+async function installVersion(v) {
+    if(!confirm(`Instalar ${v.type} ${v.id}?`)) return; document.getElementById('version-modal').style.display='none'; let url = '';
+    try {
+        if(v.type === 'vanilla') { const res = await api('nebula/resolve-vanilla', { url: v.url }); url = res.url; }
+        else if (v.type === 'paper') { const r = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${v.id}`); const d = await r.json(); url = `https://api.papermc.io/v2/projects/paper/versions/${v.id}/builds/${d.builds[d.builds.length-1]}/downloads/paper-${v.id}-${d.builds[d.builds.length-1]}.jar`; }
+        else if (v.type === 'fabric') { const r = await fetch('https://meta.fabricmc.net/v2/versions/loader'); const d = await r.json(); url = `https://meta.fabricmc.net/v2/versions/loader/${v.id}/${d[0].version}/1.0.0/server/jar`; }
+        else if (v.type === 'forge') { url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v.id}-${v.id}/forge-${v.id}-${v.id}-universal.jar`; Toastify({text:'Intentando descarga directa...', style:{background:'#f39c12'}}).showToast(); }
+        if(url) api('install', { url, filename: 'server.jar' });
+    } catch(e) { Toastify({text:'Error Link', style:{background:'#ef4444'}}).showToast(); }
+}
+function loadFileBrowser(p) { currentPath=p; document.getElementById('file-breadcrumb').innerText='/root'+(p?'/'+p:''); api('files?path='+encodeURIComponent(p)).then(files=>{ const l=document.getElementById('file-list'); l.innerHTML=''; if(p){const b=document.createElement('div');b.className='file-row';b.innerHTML='<span>..</span>';b.onclick=()=>{const a=p.split('/');a.pop();loadFileBrowser(a.join('/'))};l.appendChild(b)} files.forEach(f=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span><i class="fa-solid ${f.isDir?'fa-folder':'fa-file'}" style="color:${f.isDir?'var(--p)':'var(--muted)'}"></i> ${f.name}</span><span>${f.size}</span>`;if(f.isDir)e.onclick=()=>loadFileBrowser((p?p+'/':'')+f.name);else e.onclick=()=>openEditor((p?p+'/':'')+f.name);l.appendChild(e)}) }) }
+function uploadFile() { const i=document.createElement('input');i.type='file';i.onchange=(e)=>{const f=new FormData();f.append('file',e.target.files[0]);fetch('/api/files/upload',{method:'POST',body:f}).then(r=>r.json()).then(d=>{if(d.success)loadFileBrowser(currentPath)})};i.click() }
+const ed=ace.edit("ace-editor");ed.setTheme("ace/theme/dracula");ed.setOptions({fontSize:"14px"});
+function openEditor(f){currentFile=f;api('files/read',{file:f}).then(d=>{if(!d.error){document.getElementById('editor-modal').style.display='flex';ed.setValue(d.content,-1);ed.session.setMode("ace/mode/"+(f.endsWith('.json')?'json':'properties'))}})}
+function saveFile(){api('files/save',{file:currentFile,content:ed.getValue()}).then(()=>{document.getElementById('editor-modal').style.display='none'})}
+function closeEditor(){document.getElementById('editor-modal').style.display='none'}
+function loadBackups(){api('backups').then(b=>{const l=document.getElementById('backup-list');l.innerHTML='';b.forEach(k=>{const e=document.createElement('div');e.className='file-row';e.innerHTML=`<span>${k.name}</span><div><button class="btn btn-sm" onclick="restoreBackup('${k.name}')">Restaurar</button><button class="btn btn-sm stop" onclick="deleteBackup('${k.name}')">X</button></div>`;l.appendChild(e)})})}
+function createBackup(){api('backups/create').then(()=>setTimeout(loadBackups,2000))}
+function deleteBackup(n){if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups)}
+function restoreBackup(n){if(confirm('¿Restaurar?'))api('backups/restore',{name:n})}
+function loadCfg(){api('config').then(d=>{const c=document.getElementById('cfg-list');c.innerHTML='';for(const[k,v]of Object.entries(d))c.innerHTML+=`<div><label style="font-size:11px;color:var(--p)">${k}</label><input class="cfg-in" data-k="${k}" value="${v}"></div>`})}
+function saveCfg(){const d={};document.querySelectorAll('.cfg-in').forEach(i=>d[i.dataset.k]=i.value);api('config',d)}
+EOF
+
 # ============================================================
-# 4. FINALIZAR
+# 5. FINALIZAR
 # ============================================================
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
