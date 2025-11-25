@@ -1,119 +1,92 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.3.0 (UNIVERSAL + LOGO FIX)
-# - Compatible: Ubuntu 20.04 -> 25.10 | Debian 11 -> 13
-# - Updater: Direct copy from repo 'public/' folder (Logos OK)
-# - Logic: Auto-detects Java & Node availability
+# NEBULA PANEL - V1.3.0 (LOGO FIX)
+# - Updater ahora protege y organiza logo.svg y logo.png/ico
+# - Mantiene todas las funcionalidades de la V1.3.0
 # ============================================================
 clear
 set -e
 
 # Colores
-CYAN='\033[0;36m'
 PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Verificación de Root
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}❌ Error: Debes ejecutar este script como ROOT (sudo -i)${NC}"
-  exit 1
-fi
-
-echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.3.0 (UNIVERSAL)...${NC}"
+echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.3.0 (LOGO SUPPORT)...${NC}"
 
 # ============================================================
-# 1. PREPARACIÓN DEL SISTEMA
+# 1. PREPARACIÓN
 # ============================================================
-echo -e "${CYAN}⏳ Sincronizando reloj y actualizando sistema...${NC}"
+CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
+if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
-# 1. Fix de Hora (Vital para SSL y Apt)
-if command -v wget >/dev/null 2>&1; then
-    CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
-    if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
-fi
-
-# 2. Dependencias Base
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl wget git unzip zip tar build-essential software-properties-common gnupg
-
-# 3. Limpieza previa
 systemctl stop aetherpanel >/dev/null 2>&1 || true
 pkill -f node >/dev/null 2>&1 || true
 rm -rf /opt/aetherpanel
 mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 
 # ============================================================
-# 2. INSTALACIÓN DE ENTORNOS (NODE & JAVA)
+# 2. EL SCRIPT DE ACTUALIZACIÓN (CON PROTECCIÓN DE LOGOS)
 # ============================================================
-
-# --- NODE.JS 20 LTS (Universal) ---
-echo -e "${CYAN}🟢 Instalando Node.js 20 LTS...${NC}"
-if ! command -v node >/dev/null 2>&1 || [ "$(node -v | cut -d. -f1)" != "v20" ]; then
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg --yes
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
-    apt-get update -qq
-    apt-get install -y -qq nodejs
-fi
-
-# --- JAVA 21 (Lógica Universal Inteligente) ---
-echo -e "${CYAN}☕ Verificando Java 21...${NC}"
-install_java_manual() {
-    echo -e "${YELLOW}⚠️ Java 21 no encontrado en repositorios. Usando Amazon Corretto...${NC}"
-    wget -O /tmp/java21.deb https://corretto.aws/downloads/latest/amazon-corretto-21-x64-linux-jdk.deb
-    dpkg -i /tmp/java21.deb || apt-get install -f -y
-    rm /tmp/java21.deb
-}
-
-if apt-cache search openjdk-21-jre-headless | grep -q openjdk-21; then
-    apt-get install -y -qq openjdk-21-jre-headless || install_java_manual
-else
-    install_java_manual
-fi
-
-# ============================================================
-# 3. GENERACIÓN DEL UPDATER (CORREGIDO)
-# ============================================================
-# Este updater confía en que los logos vienen dentro de la carpeta 'public' del ZIP
 cat <<'EOF' > /opt/aetherpanel/updater.sh
 #!/bin/bash
+# Nebula External Updater
 LOG="/opt/aetherpanel/update.log"
 REPO_ZIP="https://github.com/reychampi/nebula/archive/refs/heads/main.zip"
 
-echo "--- UPDATE START $(date) ---" > $LOG
+echo "--- STARTING UPDATE $(date) ---" > $LOG
+
+# 1. Detener servicio
 systemctl stop aetherpanel >> $LOG 2>&1
+
+# 2. Limpiar temporales
 rm -rf /tmp/nebula_update /tmp/update.zip >> $LOG 2>&1
 mkdir -p /tmp/nebula_update
 
-echo "Downloading..." >> $LOG
+# 3. Descargar
+echo "Downloading repo..." >> $LOG
 wget $REPO_ZIP -O /tmp/update.zip >> $LOG 2>&1
+
+# 4. Descomprimir
 unzip -o /tmp/update.zip -d /tmp/nebula_update >> $LOG 2>&1
 
-# Detectar carpeta raíz del zip
+# 5. Detectar carpeta
 EXTRACTED_DIR=$(ls /tmp/nebula_update | head -n 1)
-echo "Copying content from $EXTRACTED_DIR..." >> $LOG
 
-# COPIA RECURSIVA: Esto copiará 'public/logo.svg' a '/opt/aetherpanel/public/logo.svg' automáticamente
+# 6. Copiar Archivos
+echo "Copying files..." >> $LOG
 cp -r /tmp/nebula_update/$EXTRACTED_DIR/* /opt/aetherpanel/ >> $LOG 2>&1
 
-# Limpieza de archivos innecesarios (instrucciones, readmes)
-rm -f /opt/aetherpanel/installserver.sh /opt/aetherpanel/README.md /opt/aetherpanel/.gitignore
+# 7. ORGANIZACIÓN DE LOGOS (NUEVO)
+# Si los logos están en la raíz, los movemos a public para que la web los vea
+echo "Organizing assets..." >> $LOG
+[ -f /opt/aetherpanel/logo.svg ] && mv /opt/aetherpanel/logo.svg /opt/aetherpanel/public/
+[ -f /opt/aetherpanel/logo.png ] && mv /opt/aetherpanel/logo.png /opt/aetherpanel/public/
+[ -f /opt/aetherpanel/logo.ico ] && mv /opt/aetherpanel/logo.ico /opt/aetherpanel/public/
 
+# 8. LIMPIEZA SEGURA
+# Ya NO borramos *.png ni *.jpg para no perder los logos
+rm -f /opt/aetherpanel/installserver.sh
+rm -f /opt/aetherpanel/README.md
+rm -f /opt/aetherpanel/.gitignore
+
+# 9. Restaurar permisos e instalar
 chmod +x /opt/aetherpanel/updater.sh
 cd /opt/aetherpanel
 npm install >> $LOG 2>&1
+
+# 10. Reiniciar
+echo "Restarting..." >> $LOG
 systemctl start aetherpanel >> $LOG 2>&1
-echo "DONE" >> $LOG
+echo "Done." >> $LOG
 EOF
+
 chmod +x /opt/aetherpanel/updater.sh
 
 # ============================================================
-# 4. GENERACIÓN DE ARCHIVOS DEL PANEL (V1.3.0)
+# 3. BACKEND
 # ============================================================
 
 # --- PACKAGE.JSON ---
@@ -121,7 +94,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
   "version": "1.3.0",
-  "description": "Nebula V1.3 Universal",
+  "description": "Nebula V1.3",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -136,7 +109,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 }
 EOF
 
-# --- SERVER.JS (Con API Mods + Updater Híbrido) ---
+# --- SERVER.JS ---
 cat <<'EOF' > /opt/aetherpanel/server.js
 const express = require('express');
 const http = require('http');
@@ -162,27 +135,40 @@ const mcServer = new MCManager(io);
 const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
+// GITHUB CONFIG
 const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.3.0' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 
-// API INFO & UPDATE
+// --- INFO API ---
 app.get('/api/info', (req, res) => {
-    try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')); res.json({ version: pkg.version }); } 
-    catch (e) { res.json({ version: 'Unknown' }); }
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+        res.json({ version: pkg.version });
+    } catch (e) { res.json({ version: 'Unknown' }); }
 });
 
+// --- UPDATER ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json`)).data;
-        if (remotePkg.version !== localPkg.version) return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
+        
+        if (remotePkg.version !== localPkg.version) {
+            return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
+        }
 
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
         for (const f of files) {
-            const remote = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
+            const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
             const localPath = path.join(__dirname, f);
-            if (fs.existsSync(localPath) && remote.trim() !== fs.readFileSync(localPath, 'utf8').trim()) { hasChanges = true; break; }
+            if (fs.existsSync(localPath)) {
+                const localContent = fs.readFileSync(localPath, 'utf8');
+                if (remoteContent.trim() !== localContent.trim()) {
+                    hasChanges = true;
+                    break;
+                }
+            }
         }
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
@@ -190,16 +176,18 @@ app.get('/api/update/check', async (req, res) => {
 });
 
 app.post('/api/update/perform', async (req, res) => {
-    if (req.body.type === 'hard') {
-        io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema...' });
-        const p = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
-        p.unref();
+    const { type } = req.body;
+    if (type === 'hard') {
+        io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización...' });
+        const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
+        updater.unref();
         res.json({ success: true, mode: 'hard' });
         setTimeout(() => process.exit(0), 1000);
-    } else {
+    } else if (type === 'soft') {
         io.emit('toast', { type: 'info', msg: '✨ Actualizando interfaz...' });
         try {
-            for (const f of ['public/index.html', 'public/style.css', 'public/app.js']) {
+            const files = ['public/index.html', 'public/style.css', 'public/app.js'];
+            for (const f of files) {
                 const c = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
                 fs.writeFileSync(path.join(__dirname, f), c);
             }
@@ -208,58 +196,80 @@ app.post('/api/update/perform', async (req, res) => {
     }
 });
 
-// API PROXIES & MODS
+// --- PROXY VERSIONES ---
 app.post('/api/nebula/versions', async (req, res) => {
+    const { type } = req.body;
     try {
-        const t = req.body.type;
-        let l = [];
-        if(t==='vanilla') l = (await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).data.versions.filter(v=>v.type==='release').map(v=>({id:v.id, url:v.url, type:'vanilla'}));
-        else if(t==='paper') l = (await apiClient.get('https://api.papermc.io/v2/projects/paper')).data.versions.reverse().map(v=>({id:v, type:'paper'}));
-        else if(t==='fabric') l = (await apiClient.get('https://meta.fabricmc.net/v2/versions/game')).data.filter(v=>v.stable).map(v=>({id:v.version, type:'fabric'}));
-        else if(t==='forge') {
-            const p = (await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json')).data.promos;
-            const s = new Set(); Object.keys(p).forEach(k=>{const v=k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v)});
-            l = Array.from(s).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true,sensitivity:'base'})).map(v=>({id:v, type:'forge'}));
+        let list = [];
+        if (type === 'vanilla') {
+            const r = await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
+            list = r.data.versions.filter(v => v.type === 'release').map(v => ({ id: v.id, url: v.url, type: 'vanilla' }));
+        } else if (type === 'paper') {
+            const r = await apiClient.get('https://api.papermc.io/v2/projects/paper');
+            list = r.data.versions.reverse().map(v => ({ id: v, type: 'paper' }));
+        } else if (type === 'fabric') {
+            const r = await apiClient.get('https://meta.fabricmc.net/v2/versions/game');
+            list = r.data.filter(v => v.stable).map(v => ({ id: v.version, type: 'fabric' }));
+        } else if (type === 'forge') {
+            const r = await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
+            const p = r.data.promos;
+            const s = new Set();
+            Object.keys(p).forEach(k => { const v = k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v); });
+            list = Array.from(s).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })).map(v => ({ id: v, type: 'forge' }));
         }
-        res.json(l);
-    } catch(e) { res.status(500).json({error:'API Error'}); }
+        res.json(list);
+    } catch (e) { res.status(500).json({ error: "API Error" }); }
 });
 
-app.post('/api/nebula/resolve-vanilla', async (req, res) => { try { res.json({url: (await apiClient.get(req.body.url)).data.downloads.server.url}); } catch(e){res.status(500).json({error:'Error'});} });
+app.post('/api/nebula/resolve-vanilla', async (req, res) => {
+    try { const r = await apiClient.get(req.body.url); res.json({ url: r.data.downloads.server.url }); } catch (e) { res.status(500).json({error: 'Error resolving'}); }
+});
 
+// --- MOD INSTALLER API ---
 app.post('/api/mods/install', async (req, res) => {
     const { url, name } = req.body;
-    const d = path.join(SERVER_DIR, 'mods');
-    if(!fs.existsSync(d)) fs.mkdirSync(d);
-    io.emit('toast', {type:'info', msg:`Instalando ${name}...`});
-    exec(`wget -q -O "${path.join(d, name.replace(/\s+/g,'_')+'.jar')}" "${url}"`, (e)=>{
-        if(e) io.emit('toast',{type:'error', msg:'Error descarga'}); else io.emit('toast',{type:'success', msg:'Instalado'});
+    const modsDir = path.join(SERVER_DIR, 'mods');
+    if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir);
+    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
+    const fileName = name.replace(/\s+/g, '_') + '.jar';
+    const target = path.join(modsDir, fileName);
+    exec(`wget -q -O "${target}" "${url}"`, (error) => {
+        if (error) {
+            io.emit('toast', { type: 'error', msg: 'Error al descargar' });
+            res.json({ success: false });
+        } else {
+            io.emit('toast', { type: 'success', msg: 'Instalado' });
+            res.json({ success: true });
+        }
     });
-    res.json({success:true});
 });
 
-// API CORE
 app.get('/api/stats', (req, res) => {
-    osUtils.cpuUsage((c) => {
-        let d = 0; try{fs.readdirSync(SERVER_DIR).forEach(f=>{try{d+=fs.statSync(path.join(SERVER_DIR,f)).size}catch{}})}catch{}
-        res.json({cpu:c*100, ram_used:(os.totalmem()-os.freemem())/1048576, ram_total:os.totalmem()/1048576, disk_used:d/1048576, disk_total:20480});
+    osUtils.cpuUsage((cpu) => {
+        let disk = 0; try { fs.readdirSync(SERVER_DIR).forEach(f => { try { disk += fs.statSync(path.join(SERVER_DIR, f)).size; } catch {} }); } catch {}
+        res.json({ cpu: cpu * 100, ram_used: (os.totalmem()-os.freemem())/1048576, ram_total: os.totalmem()/1048576, disk_used: disk/1048576, disk_total: 20480 });
     });
 });
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
-app.post('/api/power/:a', async (req, res) => { try{if(mcServer[req.params.a])await mcServer[req.params.a]();res.json({success:true});}catch(e){res.status(500).json({});}});
+app.post('/api/power/:action', async (req, res) => { try{if(mcServer[req.params.action])await mcServer[req.params.action]();res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
 app.post('/api/config', (req, res) => { mcServer.writeProperties(req.body); res.json({success:true}); });
-app.post('/api/install', async (req, res) => { try{await mcServer.installJar(req.body.url, req.body.filename);res.json({success:true});}catch(e){res.status(500).json({});}});
-app.get('/api/files', (req, res) => { const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); if(!fs.existsSync(t))return res.json([]); res.json(fs.readdirSync(t,{withFileTypes:true}).map(f=>({name:f.name, isDir:f.isDirectory(), size:f.isDirectory()?'-':(fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'})).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); });
-app.post('/api/files/read', (req, res) => { const p=path.join(SERVER_DIR,req.body.file.replace(/\.\./g,'')); if(fs.existsSync(p))res.json({content:fs.readFileSync(p,'utf8')}); else res.status(404).json({}); });
-app.post('/api/files/save', (req, res) => { fs.writeFileSync(path.join(SERVER_DIR,req.body.file.replace(/\.\./g,'')),req.body.content); res.json({success:true}); });
-app.post('/api/files/upload', upload.single('file'), (req, res) => { if(req.file){fs.renameSync(req.file.path, path.join(SERVER_DIR,req.file.originalname)); res.json({success:true});}else res.json({success:false}); });
-app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR))fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'}))); });
+app.post('/api/install', async (req, res) => { try{await mcServer.installJar(req.body.url, req.body.filename);res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
+app.get('/api/files', (req, res) => { const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); if (!fs.existsSync(t)) return res.json([]); res.json(fs.readdirSync(t, {withFileTypes:true}).map(f => ({ name: f.name, isDir: f.isDirectory(), size: f.isDirectory()?'-':(fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'})).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); });
+app.post('/api/files/read', (req, res) => { const p = path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')); if(fs.existsSync(p)) res.json({content:fs.readFileSync(p,'utf8')}); else res.status(404).json({error:'404'}); });
+app.post('/api/files/save', (req, res) => { fs.writeFileSync(path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')), req.body.content); res.json({success:true}); });
+app.post('/api/files/upload', upload.single('file'), (req, res) => { if(req.file) { fs.renameSync(req.file.path, path.join(SERVER_DIR, req.file.originalname)); res.json({success:true}); } else res.json({success:false}); });
+app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'}))); });
 app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); });
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
 
-io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
+io.on('connection', (socket) => {
+    socket.emit('logs_history', mcServer.getRecentLogs());
+    socket.emit('status_change', mcServer.status);
+    socket.on('command', (cmd) => mcServer.sendCommand(cmd));
+});
+
 server.listen(3000, () => console.log('Nebula V1.3.0 running'));
 EOF
 
@@ -294,7 +304,9 @@ class MCManager {
         this.process = spawn('java', ['-Xmx'+this.ram, '-Xms'+this.ram, '-jar', jar, 'nogui'], { cwd: this.serverPath });
         this.process.stdout.on('data', d => { const s=d.toString(); this.log(s); if(s.includes('Done')||s.includes('For help')) { this.status='ONLINE'; this.io.emit('status_change', this.status); }});
         this.process.stderr.on('data', d => this.log(d.toString()));
-        this.process.on('close', () => { this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n'); });
+        this.process.on('close', () => { 
+            this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n');
+        });
     }
     async stop() { if(this.process && this.status==='ONLINE') { this.status='STOPPING'; this.io.emit('status_change',this.status); this.process.stdin.write('stop\n'); return new Promise(r=>{let c=0;const i=setInterval(()=>{c++;if(this.status==='OFFLINE'||c>20){clearInterval(i);r()}},500)}); }}
     async restart() { await this.stop(); setTimeout(()=>this.start(), 3000); }
@@ -313,7 +325,11 @@ class MCManager {
 module.exports = MCManager;
 EOF
 
-# --- INDEX.HTML ---
+# ============================================================
+# 3. FRONTEND
+# ============================================================
+
+# --- INDEX.HTML (Con Favicon y Logo SVG) ---
 cat <<'EOF' > /opt/aetherpanel/public/index.html
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
@@ -337,10 +353,22 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 <body>
     <div id="editor-modal" class="modal-overlay" style="display:none"><div class="modal glass"><div class="modal-header"><h3>Editor</h3><div><button class="btn btn-ghost" onclick="closeEditor()">Cerrar</button><button class="btn btn-primary" onclick="saveFile()">Guardar</button></div></div><div id="ace-editor"></div></div></div>
     <div id="version-modal" class="modal-overlay" style="display:none"><div class="modal glass version-modal"><div class="modal-header"><h3><i class="fa-solid fa-cloud"></i> Repositorio</h3><button class="btn btn-ghost" onclick="document.getElementById('version-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div><div class="mod-search"><input type="text" id="version-search" placeholder="Buscar versión..." class="search-input" autofocus><span id="loading-text" style="display:none;font-size:12px;color:var(--p)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span></div><div id="version-list" class="version-grid"></div></div></div>
-    <div id="update-modal" class="modal-overlay" style="display:none"><div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;"><div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div><h3 id="up-title">Actualización</h3><p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p><div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div></div></div>
+    
+    <div id="update-modal" class="modal-overlay" style="display:none">
+        <div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;">
+            <div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div>
+            <h3 id="up-title">Actualización</h3>
+            <p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p>
+            <div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div>
+        </div>
+    </div>
+
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="brand"><div class="brand-logo"><img src="logo.svg" style="width:24px;height:24px"></div><div class="brand-text"><span id="sidebar-version-text">V1.3.0</span> <span>NEBULA</span></div></div>
+            <div class="brand">
+                <div class="brand-logo"><img src="logo.svg" style="width:24px;height:24px"></div>
+                <div class="brand-text"><span id="sidebar-version-text">V1.3.0</span> <span>NEBULA</span></div>
+            </div>
             <nav>
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
@@ -367,7 +395,14 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
                     <button onclick="api('power/kill')" class="btn-control kill"><i class="fa-solid fa-skull-crossbones"></i></button>
                 </div>
             </header>
-            <div id="tab-stats" class="tab-content active"><div class="stats-grid"><div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div></div></div>
+
+            <div id="tab-stats" class="tab-content active">
+                <div class="stats-grid">
+                    <div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div>
+                    <div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div>
+                    <div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div>
+                </div>
+            </div>
             <div id="tab-console" class="tab-content"><div class="console-box glass"><div id="terminal"></div></div></div>
             <div id="tab-files" class="tab-content"><div class="card glass full"><div class="card-header"><div class="breadcrumb" id="file-breadcrumb">/root</div><div><button onclick="loadFileBrowser(currentPath)" class="btn btn-ghost"><i class="fa-solid fa-rotate"></i></button><button onclick="uploadFile()" class="btn btn-primary"><i class="fa-solid fa-upload"></i></button></div></div><div id="file-list" class="file-list"></div></div></div>
             <div id="tab-versions" class="tab-content"><h2 class="tab-title">Núcleos Disponibles</h2><div class="versions-container"><div class="version-card glass" onclick="loadVersions('vanilla')"><div class="v-icon" style="background:#27ae60"><i class="fa-solid fa-cube"></i></div><div class="v-info"><h3>Vanilla</h3><p>Oficial</p></div></div><div class="version-card glass" onclick="loadVersions('paper')"><div class="v-icon" style="background:#2980b9"><i class="fa-solid fa-paper-plane"></i></div><div class="v-info"><h3>Paper</h3><p>Optimizado</p></div></div><div class="version-card glass" onclick="loadVersions('fabric')"><div class="v-icon" style="background:#f39c12"><i class="fa-solid fa-scroll"></i></div><div class="v-info"><h3>Fabric</h3><p>Mods</p></div></div><div class="version-card glass" onclick="loadVersions('forge')"><div class="v-icon" style="background:#c0392b"><i class="fa-solid fa-hammer"></i></div><div class="v-info"><h3>Forge</h3><p>Ilimitado</p></div></div></div></div>
@@ -380,18 +415,17 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 </html>
 EOF
 
-# --- APP.JS ---
+# --- APP.JS (Con Tienda Mods) ---
 cat <<'EOF' > /opt/aetherpanel/public/app.js
 const socket = io();
 let currentPath = '', currentFile = '', allVersions = [];
 
-// INFO
+// GET VERSION INFO
 fetch('/api/info').then(r=>r.json()).then(d => {
     document.getElementById('sidebar-version-text').innerText = 'V' + d.version;
     document.getElementById('header-version').innerText = 'V' + d.version;
 });
 
-// THEMES
 function setTheme(mode) { localStorage.setItem('theme', mode); updateThemeUI(mode); }
 function updateThemeUI(mode) {
     let apply = mode; if(mode==='auto') apply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light';
@@ -409,13 +443,14 @@ function checkUpdate(isAuto=false) {
     fetch('/api/update/check').then(r=>r.json()).then(d => {
         if(d.type !== 'none') showUpdateModal(d);
         else if(!isAuto) Toastify({text:'Sistema actualizado', style:{background:'#10b981'}}).showToast();
-    }).catch(e => { if(!isAuto) Toastify({text:'Error GitHub', style:{background:'#ef4444'}}).showToast(); });
+    });
 }
 function showUpdateModal(d) {
     const m = document.getElementById('update-modal');
     const t = document.getElementById('update-text');
     const a = document.getElementById('up-actions');
     const ti = document.getElementById('up-title');
+    
     if(d.type === 'hard') {
         ti.innerText = "Actualización Mayor";
         t.innerText = `Versión local: ${d.local}\nNueva versión: ${d.remote}\n\nSe requiere reinicio.`;
@@ -444,10 +479,11 @@ const modsDB = [
     { name: "Nature's Compass", url: "https://mediafilez.forgecdn.net/files/4682/937/NaturesCompass-1.20.1-1.11.2-forge.jar", icon: "fa-compass" },
     { name: "Clumps", url: "https://mediafilez.forgecdn.net/files/4603/862/Clumps-forge-1.20.1-12.0.0.3.jar", icon: "fa-users" }
 ];
+
 function openModStore() {
     const m = document.getElementById('version-modal'); m.style.display='flex'; 
     document.getElementById('version-list').innerHTML=''; 
-    m.querySelector('.modal-header h3').innerHTML='<i class="fa-solid fa-puzzle-piece"></i> Tienda Mods';
+    m.querySelector('h3').innerHTML='<i class="fa-solid fa-puzzle-piece"></i> Tienda Mods';
     document.getElementById('loading-text').style.display='none';
     modsDB.forEach(mod => {
         const el = document.createElement('div'); el.className='version-item';
@@ -457,7 +493,7 @@ function openModStore() {
     });
 }
 
-// CHARTS & OTHERS
+// OTHERS
 const createChart = (ctx, color) => new Chart(ctx, { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ data: Array(20).fill(0), borderColor: color, backgroundColor: color+'15', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { x: { display: false }, y: { min: 0, grid: { display: false } } }, plugins: { legend: { display: false } } } });
 const cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), '#8b5cf6');
 const ramChart = createChart(document.getElementById('ramChart').getContext('2d'), '#3b82f6');
@@ -477,7 +513,7 @@ function api(ep, body) { return fetch('/api/'+ep, { method: 'POST', headers: {'C
 
 async function loadVersions(type) {
     const m = document.getElementById('version-modal'); m.style.display='flex'; document.getElementById('version-list').innerHTML=''; 
-    m.querySelector('.modal-header h3').innerHTML='<i class="fa-solid fa-cloud"></i> Repositorio';
+    m.querySelector('h3').innerHTML='<i class="fa-solid fa-cloud"></i> Repositorio';
     document.getElementById('loading-text').style.display='inline';
     try { allVersions = await api('nebula/versions', { type }); renderVersions(allVersions); } catch(e) { Toastify({text:'API Error', style:{background:'#ef4444'}}).showToast(); }
     document.getElementById('loading-text').style.display='none';
