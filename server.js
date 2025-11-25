@@ -26,7 +26,7 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.3.0' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 
-// --- INFO API (READ DISK) ---
+// --- INFO API ---
 app.get('/api/info', (req, res) => {
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -34,7 +34,7 @@ app.get('/api/info', (req, res) => {
     } catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- LOGICA DE ACTUALIZACIÓN HÍBRIDA ---
+// --- UPDATER ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -57,27 +57,20 @@ app.get('/api/update/check', async (req, res) => {
                 }
             }
         }
-
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
-
-    } catch (e) {
-        console.error(e);
-        res.json({ type: 'error' });
-    }
+    } catch (e) { res.json({ type: 'error' }); }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
-
     if (type === 'hard') {
-        io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización de sistema...' });
+        io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización...' });
         const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
         updater.unref();
         res.json({ success: true, mode: 'hard' });
         setTimeout(() => process.exit(0), 1000);
-    } 
-    else if (type === 'soft') {
+    } else if (type === 'soft') {
         io.emit('toast', { type: 'info', msg: '✨ Actualizando interfaz...' });
         try {
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
@@ -119,13 +112,37 @@ app.post('/api/nebula/resolve-vanilla', async (req, res) => {
     try { const r = await apiClient.get(req.body.url); res.json({ url: r.data.downloads.server.url }); } catch (e) { res.status(500).json({error: 'Error resolving'}); }
 });
 
+// --- MOD INSTALLER API (NUEVO) ---
+app.post('/api/mods/install', async (req, res) => {
+    const { url, name } = req.body;
+    const modsDir = path.join(SERVER_DIR, 'mods');
+    
+    if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir);
+
+    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
+    
+    const fileName = name.replace(/\s+/g, '_') + '.jar';
+    const target = path.join(modsDir, fileName);
+    const cmd = `wget -q -O "${target}" "${url}"`;
+    
+    exec(cmd, (error) => {
+        if (error) {
+            io.emit('toast', { type: 'error', msg: 'Error al descargar mod' });
+            res.json({ success: false });
+        } else {
+            io.emit('toast', { type: 'success', msg: `${name} instalado correctamente` });
+            res.json({ success: true });
+        }
+    });
+});
+
+// --- RUTAS BÁSICAS ---
 app.get('/api/stats', (req, res) => {
     osUtils.cpuUsage((cpu) => {
         let disk = 0; try { fs.readdirSync(SERVER_DIR).forEach(f => { try { disk += fs.statSync(path.join(SERVER_DIR, f)).size; } catch {} }); } catch {}
         res.json({ cpu: cpu * 100, ram_used: (os.totalmem()-os.freemem())/1048576, ram_total: os.totalmem()/1048576, disk_used: disk/1048576, disk_total: 20480 });
     });
 });
-
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:action', async (req, res) => { try{if(mcServer[req.params.action])await mcServer[req.params.action]();res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
@@ -139,27 +156,6 @@ app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirS
 app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); });
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
-
-// --- MOD INSTALLER API ---
-app.post('/api/mods/install', async (req, res) => {
-    const { url, name } = req.body;
-    const modsDir = path.join(SERVER_DIR, 'mods');
-    if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir);
-    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
-    const fileName = name.replace(/\s+/g, '_') + '.jar';
-    const target = path.join(modsDir, fileName);
-    const cmd = `wget -q -O "${target}" "${url}"`;
-    
-    exec(cmd, (error) => {
-        if (error) {
-            io.emit('toast', { type: 'error', msg: 'Error al descargar mod' });
-            res.json({ success: false });
-        } else {
-            io.emit('toast', { type: 'success', msg: `${name} instalado` });
-            res.json({ success: true });
-        }
-    });
-});
 
 io.on('connection', (socket) => {
     socket.emit('logs_history', mcServer.getRecentLogs());
