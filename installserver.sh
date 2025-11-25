@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.2.2 (SAFE UI UPDATE + TIME FIX)
-# - Fixed: System Clock Sync (Pre-install)
-# - Fixed: APIs (User-Agent headers)
-# - Hybrid Update System (Full vs Hotfix)
+# NEBULA PANEL - V1.2.2 (REAL-TIME VERSION CHECK)
+# - Server.js ahora lee package.json en cada petición
+# - Garantiza que la versión mostrada es la REAL instalada
 # ============================================================
 clear
 set -e
@@ -15,24 +14,15 @@ PURPLE='\033[0;35m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.2 (CON AUTO-FIX DE HORA)...${NC}"
+echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.2 (VERSION FIX)...${NC}"
 
 # ============================================================
-# 0. FIX PRELIMINAR: SINCRONIZACIÓN DE HORA
+# 1. PREPARACIÓN (Auto-Fix Hora + Limpieza)
 # ============================================================
-echo -e "${CYAN}⏳ Verificando reloj del sistema...${NC}"
-# Forzamos la hora correcta obteniéndola de Google, ya que apt falla si la hora está mal
+echo -e "${CYAN}⏳ Sincronizando reloj...${NC}"
 CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
-if [ ! -z "$CURRENT_DATE" ]; then
-    date -s "$CURRENT_DATE" >/dev/null 2>&1
-    echo -e "${GREEN}✅ Hora sincronizada correctamente.${NC}"
-else
-    echo -e "${PURPLE}⚠️ No se pudo sincronizar la hora (Continuando bajo riesgo).${NC}"
-fi
+if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
-# ============================================================
-# 1. PREPARACIÓN
-# ============================================================
 systemctl stop aetherpanel >/dev/null 2>&1 || true
 pkill -f node >/dev/null 2>&1 || true
 rm -rf /opt/aetherpanel
@@ -42,12 +32,12 @@ mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 # 2. BACKEND
 # ============================================================
 
-# --- PACKAGE.JSON (V1.2.2) ---
+# --- PACKAGE.JSON ---
 cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
   "version": "1.2.2",
-  "description": "Nebula V1.2.2 SafeUpdate",
+  "description": "Nebula V1.2.2 RealTime",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -62,7 +52,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 }
 EOF
 
-# --- SERVER.JS (Lógica Híbrida y API Fix) ---
+# --- SERVER.JS (Lectura de versión en tiempo real) ---
 cat <<'EOF' > /opt/aetherpanel/server.js
 const express = require('express');
 const http = require('http');
@@ -84,68 +74,65 @@ const upload = multer({ dest: os.tmpdir() });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// CONFIGURACIÓN
 const mcServer = new MCManager(io);
 const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
-const LOCAL_VERSION = require('./package.json').version;
-
-// CLIENTE AXIOS (User-Agent FIX para APIs)
-const apiClient = axios.create({
-    headers: { 'User-Agent': 'Nebula-Panel/1.0' }
-});
 
 // GITHUB CONFIG
+const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.2' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 const REPO_ZIP = 'https://github.com/reychampi/nebula/archive/refs/heads/main.zip';
 
-// --- SISTEMA DE ACTUALIZACIÓN HÍBRIDO ---
+// --- INFO API (VERSIÓN REAL EN DISCO) ---
+app.get('/api/info', (req, res) => {
+    try {
+        // Leemos el archivo FÍSICO cada vez que se pide la info
+        // Esto asegura que si se actualizó el archivo, la web lo sepa al instante
+        const packagePath = path.join(__dirname, 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+        res.json({ version: pkg.version });
+    } catch (e) {
+        res.json({ version: 'Error' });
+    }
+});
+
+// --- SISTEMA DE ACTUALIZACIÓN ---
 app.get('/api/update/check', async (req, res) => {
     try {
-        // 1. Chequear versión (Package.json)
-        const pkgReq = await apiClient.get(`${REPO_RAW}/package.json`);
-        const remoteVer = pkgReq.data.version;
+        // Versión Local Real
+        const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+        const localVer = localPkg.version;
 
-        if (remoteVer !== LOCAL_VERSION) {
-            // CASO 1: Versión diferente -> ACTUALIZACIÓN COMPLETA
-            return res.json({ type: 'full', local: LOCAL_VERSION, remote: remoteVer });
+        // Versión Remota
+        const remotePkg = await apiClient.get(`${REPO_RAW}/package.json`);
+        const remoteVer = remotePkg.data.version;
+
+        if (remoteVer !== localVer) {
+            return res.json({ type: 'full', local: localVer, remote: remoteVer });
         }
 
-        // 2. Si versión es igual, chequear cambios visuales (HTML/CSS/JS-Front)
-        const filesToCheck = ['public/index.html', 'public/style.css', 'public/app.js'];
+        // Check Hotfix (Visual)
+        const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
-
-        for (const file of filesToCheck) {
-            const remoteContent = (await apiClient.get(`${REPO_RAW}/${file}`)).data;
-            const localPath = path.join(__dirname, file);
-            if (fs.existsSync(localPath)) {
-                const localContent = fs.readFileSync(localPath, 'utf8');
-                if (remoteContent.trim() !== localContent.trim()) {
-                    hasChanges = true;
-                    break;
-                }
-            }
+        for (const f of files) {
+            const r = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
+            const l = fs.readFileSync(path.join(__dirname, f), 'utf8');
+            if (r.trim() !== l.trim()) { hasChanges = true; break; }
         }
 
-        if (hasChanges) {
-            // CASO 2: Cambios visuales -> HOTFIX
-            return res.json({ type: 'hotfix', local: LOCAL_VERSION, remote: remoteVer });
-        }
-
-        // CASO 3: Todo igual
+        if (hasChanges) return res.json({ type: 'hotfix', local: localVer, remote: remoteVer });
         res.json({ type: 'none' });
 
     } catch (e) {
-        console.error("Update Check Error:", e.message);
+        console.error("Update error:", e.message);
         res.json({ type: 'error', msg: e.message });
     }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
-
     if (type === 'full') {
-        io.emit('toast', { type: 'warning', msg: '🚀 Iniciando actualización completa...' });
+        io.emit('toast', { type: 'warning', msg: '🚀 Actualizando sistema...' });
         const cmd = `
             wget ${REPO_ZIP} -O /tmp/update.zip && \
             unzip -o /tmp/update.zip -d /tmp/nebula_update && \
@@ -157,23 +144,20 @@ app.post('/api/update/perform', async (req, res) => {
         `;
         exec(cmd);
         res.json({ success: true, mode: 'full' });
-    } 
-    else if (type === 'hotfix') {
+    } else if (type === 'hotfix') {
         io.emit('toast', { type: 'info', msg: '🎨 Aplicando parche visual...' });
         try {
-            const filesToUpdate = ['public/index.html', 'public/style.css', 'public/app.js'];
-            for (const file of filesToUpdate) {
-                const content = (await apiClient.get(`${REPO_RAW}/${file}`)).data;
-                fs.writeFileSync(path.join(__dirname, file), content);
+            const files = ['public/index.html', 'public/style.css', 'public/app.js'];
+            for (const f of files) {
+                const c = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
+                fs.writeFileSync(path.join(__dirname, f), c);
             }
             res.json({ success: true, mode: 'hotfix' });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
+        } catch (e) { res.status(500).json({ error: e.message }); }
     }
 });
 
-// --- PROXY DE VERSIONES (FIXED) ---
+// --- PROXY & UTILIDADES ---
 app.post('/api/nebula/versions', async (req, res) => {
     const { type } = req.body;
     try {
@@ -184,51 +168,42 @@ app.post('/api/nebula/versions', async (req, res) => {
         } else if (type === 'paper') {
             const r = await apiClient.get('https://api.papermc.io/v2/projects/paper');
             list = r.data.versions.reverse().map(v => ({ id: v, type: 'paper' }));
-        } else if (type === 'purpur') {
-            const r = await apiClient.get('https://api.purpurmc.org/v2/purpur');
-            list = r.data.versions.reverse().map(v => ({ id: v, type: 'purpur' }));
         } else if (type === 'fabric') {
             const r = await apiClient.get('https://meta.fabricmc.net/v2/versions/game');
             list = r.data.filter(v => v.stable).map(v => ({ id: v.version, type: 'fabric' }));
         } else if (type === 'forge') {
             const r = await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
-            const promos = r.data.promos;
-            const versionsSet = new Set();
-            Object.keys(promos).forEach(key => { const ver = key.split('-')[0]; if(ver.match(/^\d+\.\d+(\.\d+)?$/)) versionsSet.add(ver); });
-            list = Array.from(versionsSet).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })).map(v => ({ id: v, type: 'forge' }));
+            const p = r.data.promos;
+            const s = new Set();
+            Object.keys(p).forEach(k => { const v = k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v); });
+            list = Array.from(s).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })).map(v => ({ id: v, type: 'forge' }));
         }
         res.json(list);
-    } catch (error) { 
-        console.error("API Error:", error.message);
-        res.status(500).json({ error: "Error conectando a la API externa" }); 
-    }
+    } catch (e) { res.status(500).json({ error: "API Error" }); }
 });
 
 app.post('/api/nebula/resolve-vanilla', async (req, res) => {
     try { const r = await apiClient.get(req.body.url); res.json({ url: r.data.downloads.server.url }); } catch (e) { res.status(500).json({error: 'Error resolving'}); }
 });
 
-// --- INFO & STATS ---
-app.get('/api/info', (req, res) => { res.json({ version: LOCAL_VERSION }); });
-
 app.get('/api/stats', (req, res) => {
     osUtils.cpuUsage((cpu) => {
-        let diskUsed = 0; try { fs.readdirSync(SERVER_DIR).forEach(file => { try { diskUsed += fs.statSync(path.join(SERVER_DIR, file)).size; } catch {} }); } catch {}
-        res.json({ cpu: cpu * 100, ram_used: (os.totalmem() - os.freemem()) / 1024 / 1024, ram_total: os.totalmem() / 1024 / 1024, disk_used: diskUsed / 1024 / 1024, disk_total: 20480 });
+        let disk = 0; try { fs.readdirSync(SERVER_DIR).forEach(f => { try { disk += fs.statSync(path.join(SERVER_DIR, f)).size; } catch {} }); } catch {}
+        res.json({ cpu: cpu * 100, ram_used: (os.totalmem()-os.freemem())/1048576, ram_total: os.totalmem()/1048576, disk_used: disk/1048576, disk_total: 20480 });
     });
 });
 
 // --- CORE ROUTES ---
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
-app.post('/api/power/:action', async (req, res) => { try { if(mcServer[req.params.action]) await mcServer[req.params.action](); res.json({success:true}); } catch (e) { res.status(500).json({error:e.message}); }});
+app.post('/api/power/:action', async (req, res) => { try{if(mcServer[req.params.action])await mcServer[req.params.action]();res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
 app.post('/api/config', (req, res) => { mcServer.writeProperties(req.body); res.json({success:true}); });
-app.post('/api/install', async (req, res) => { try { await mcServer.installJar(req.body.url, req.body.filename); res.json({success:true}); } catch (e) { res.status(500).json({error:e.message}); }});
+app.post('/api/install', async (req, res) => { try{await mcServer.installJar(req.body.url, req.body.filename);res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 app.get('/api/files', (req, res) => { const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); if (!fs.existsSync(t)) return res.json([]); res.json(fs.readdirSync(t, {withFileTypes:true}).map(f => ({ name: f.name, isDir: f.isDirectory(), size: f.isDirectory()?'-':(fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'})).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); });
 app.post('/api/files/read', (req, res) => { const p = path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')); if(fs.existsSync(p)) res.json({content:fs.readFileSync(p,'utf8')}); else res.status(404).json({error:'404'}); });
 app.post('/api/files/save', (req, res) => { fs.writeFileSync(path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')), req.body.content); res.json({success:true}); });
 app.post('/api/files/upload', upload.single('file'), (req, res) => { if(req.file) { fs.renameSync(req.file.path, path.join(SERVER_DIR, req.file.originalname)); res.json({success:true}); } else res.json({success:false}); });
-app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1024/1024).toFixed(2)+' MB'}))); });
+app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR); res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({name:f, size:(fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'}))); });
 app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); });
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
@@ -239,7 +214,7 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => mcServer.sendCommand(cmd));
 });
 
-server.listen(3000, () => console.log('Nebula V1.2.1 running'));
+server.listen(3000, () => console.log('Nebula V1.2.2 running'));
 EOF
 
 # --- MC_MANAGER.JS ---
@@ -258,13 +233,28 @@ class MCManager {
         this.status = 'OFFLINE';
         this.logs = [];
         this.ram = '4G';
+        this.updatePending = false;
+        this.updateCallback = null;
     }
+    
+    setUpdatePending(val, cb) {
+        this.updatePending = val;
+        this.updateCallback = cb;
+        this.io.emit('toast', {type:'info', msg:'Actualización en cola. Apaga el servidor para aplicar.'});
+    }
+
     log(msg) { this.logs.push(msg); if(this.logs.length>2000)this.logs.shift(); this.io.emit('console_data', msg); }
     getStatus() { return { status: this.status, ram: this.ram }; }
     getRecentLogs() { return this.logs.join(''); }
     
     async start() {
         if (this.status !== 'OFFLINE') return;
+        if (this.updatePending) {
+            this.io.emit('toast', {type:'warning', msg:'Actualizando sistema antes de iniciar...'});
+            if(this.updateCallback) this.updateCallback();
+            return; 
+        }
+        
         const eula = path.join(this.serverPath, 'eula.txt');
         if(!fs.existsSync(eula) || !fs.readFileSync(eula, 'utf8').includes('true')) fs.writeFileSync(eula, 'eula=true');
         
@@ -279,7 +269,10 @@ class MCManager {
         this.process = spawn('java', ['-Xmx'+this.ram, '-Xms'+this.ram, '-jar', jar, 'nogui'], { cwd: this.serverPath });
         this.process.stdout.on('data', d => { const s=d.toString(); this.log(s); if(s.includes('Done')||s.includes('For help')) { this.status='ONLINE'; this.io.emit('status_change', this.status); }});
         this.process.stderr.on('data', d => this.log(d.toString()));
-        this.process.on('close', () => { this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n'); });
+        this.process.on('close', () => { 
+            this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n');
+            if(this.updatePending && this.updateCallback) { this.io.emit('console_data', '\r\n>>> APLICANDO ACTUALIZACIÓN...\r\n'); this.updateCallback(); }
+        });
     }
     async stop() { if(this.process && this.status==='ONLINE') { this.status='STOPPING'; this.io.emit('status_change',this.status); this.process.stdin.write('stop\n'); return new Promise(r=>{let c=0;const i=setInterval(()=>{c++;if(this.status==='OFFLINE'||c>20){clearInterval(i);r()}},500)}); }}
     async restart() { await this.stop(); setTimeout(()=>this.start(), 3000); }
@@ -289,11 +282,7 @@ class MCManager {
         this.io.emit('toast', {type:'info', msg:'Descargando...'});
         fs.readdirSync(this.serverPath).forEach(f => { if(f.endsWith('.jar')) fs.unlinkSync(path.join(this.serverPath, f)); });
         const w = fs.createWriteStream(path.join(this.serverPath, filename));
-        try { 
-            // Axios client con User-Agent
-            const r = await axios({url, method:'GET', responseType:'stream', headers: {'User-Agent': 'Nebula/1.2.2'}}); 
-            r.data.pipe(w); return new Promise((res, rej) => { w.on('finish', ()=>{this.io.emit('toast',{type:'success',msg:'Instalado'});res();}); w.on('error', rej); }); 
-        } catch(e) { throw e; }
+        try { const r = await axios({url, method:'GET', responseType:'stream', headers: {'User-Agent': 'Nebula/1.2.2'}}); r.data.pipe(w); return new Promise((res, rej) => { w.on('finish', ()=>{this.io.emit('toast',{type:'success',msg:'Instalado'});res();}); w.on('error', rej); }); } catch(e) { throw e; }
     }
     readProperties() { try{return fs.readFileSync(path.join(this.serverPath,'server.properties'),'utf8').split('\n').reduce((a,l)=>{const[k,v]=l.split('=');if(k&&!l.startsWith('#'))a[k.trim()]=v?v.trim():'';return a;},{});}catch{return{};} }
     writeProperties(p) { fs.writeFileSync(path.join(this.serverPath,'server.properties'), '#Gen by Nebula\n'+Object.entries(p).map(([k,v])=>`${k}=${v}`).join('\n')); }
@@ -302,7 +291,7 @@ module.exports = MCManager;
 EOF
 
 # ============================================================
-# 3. FRONTEND (VISUAL)
+# 3. FRONTEND
 # ============================================================
 
 # --- INDEX.HTML ---
@@ -574,5 +563,5 @@ systemctl restart aetherpanel
 ufw allow 3000/tcp >/dev/null 2>&1
 IP=$(hostname -I | awk '{print $1}')
 echo -e "${CYAN}==========================================${NC}"
-echo -e "${CYAN}🌌 NEBULA V1.2.1 ONLINE: http://${IP}:3000${NC}"
+echo -e "${CYAN}🌌 NEBULA V1.2.2 ONLINE: http://${IP}:3000${NC}"
 echo -e "${CYAN}==========================================${NC}"
