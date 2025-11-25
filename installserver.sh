@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.2.2 (REAL-TIME VERSION CHECK)
-# - Server.js ahora lee package.json en cada petición
-# - Garantiza que la versión mostrada es la REAL instalada
+# NEBULA PANEL - V1.2.2 (UI PATCH)
+# - Fixed: "V..." placeholder removed.
+# - Default version hardcoded in HTML for instant rendering.
+# - Auto-Update & API Fixes included.
 # ============================================================
 clear
 set -e
@@ -14,12 +15,12 @@ PURPLE='\033[0;35m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.2 (VERSION FIX)...${NC}"
+echo -e "${PURPLE}🌌 APLICANDO PARCHE VISUAL NEBULA V1.2.2...${NC}"
 
 # ============================================================
-# 1. PREPARACIÓN (Auto-Fix Hora + Limpieza)
+# 1. PREPARACIÓN
 # ============================================================
-echo -e "${CYAN}⏳ Sincronizando reloj...${NC}"
+# Auto-Sync Hora (Evita errores SSL/APT)
 CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
 if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
@@ -29,7 +30,7 @@ rm -rf /opt/aetherpanel
 mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 
 # ============================================================
-# 2. BACKEND
+# 2. GENERACIÓN DE ARCHIVOS
 # ============================================================
 
 # --- PACKAGE.JSON ---
@@ -37,7 +38,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
   "version": "1.2.2",
-  "description": "Nebula V1.2.2 RealTime",
+  "description": "Nebula V1.2.2 UI Patch",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -52,7 +53,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 }
 EOF
 
-# --- SERVER.JS (Lectura de versión en tiempo real) ---
+# --- SERVER.JS ---
 cat <<'EOF' > /opt/aetherpanel/server.js
 const express = require('express');
 const http = require('http');
@@ -83,35 +84,25 @@ const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.2' }
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 const REPO_ZIP = 'https://github.com/reychampi/nebula/archive/refs/heads/main.zip';
 
-// --- INFO API (VERSIÓN REAL EN DISCO) ---
+// --- INFO API (VERSION CHECK) ---
 app.get('/api/info', (req, res) => {
     try {
-        // Leemos el archivo FÍSICO cada vez que se pide la info
-        // Esto asegura que si se actualizó el archivo, la web lo sepa al instante
-        const packagePath = path.join(__dirname, 'package.json');
-        const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         res.json({ version: pkg.version });
-    } catch (e) {
-        res.json({ version: 'Error' });
-    }
+    } catch (e) { res.json({ version: '1.2.2' }); }
 });
 
-// --- SISTEMA DE ACTUALIZACIÓN ---
+// --- UPDATER ---
 app.get('/api/update/check', async (req, res) => {
     try {
-        // Versión Local Real
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const localVer = localPkg.version;
-
-        // Versión Remota
         const remotePkg = await apiClient.get(`${REPO_RAW}/package.json`);
         const remoteVer = remotePkg.data.version;
 
-        if (remoteVer !== localVer) {
-            return res.json({ type: 'full', local: localVer, remote: remoteVer });
-        }
+        if (remoteVer !== localVer) return res.json({ type: 'full', local: localVer, remote: remoteVer });
 
-        // Check Hotfix (Visual)
+        // Hotfix Check
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
         for (const f of files) {
@@ -119,30 +110,16 @@ app.get('/api/update/check', async (req, res) => {
             const l = fs.readFileSync(path.join(__dirname, f), 'utf8');
             if (r.trim() !== l.trim()) { hasChanges = true; break; }
         }
-
         if (hasChanges) return res.json({ type: 'hotfix', local: localVer, remote: remoteVer });
         res.json({ type: 'none' });
-
-    } catch (e) {
-        console.error("Update error:", e.message);
-        res.json({ type: 'error', msg: e.message });
-    }
+    } catch (e) { res.json({ type: 'error', msg: e.message }); }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     if (type === 'full') {
         io.emit('toast', { type: 'warning', msg: '🚀 Actualizando sistema...' });
-        const cmd = `
-            wget ${REPO_ZIP} -O /tmp/update.zip && \
-            unzip -o /tmp/update.zip -d /tmp/nebula_update && \
-            cp -r /tmp/nebula_update/nebula-main/* /opt/aetherpanel/ && \
-            rm -rf /tmp/update.zip /tmp/nebula_update && \
-            cd /opt/aetherpanel && \
-            npm install && \
-            systemctl restart aetherpanel
-        `;
-        exec(cmd);
+        exec(`wget ${REPO_ZIP} -O /tmp/update.zip && unzip -o /tmp/update.zip -d /tmp/nebula_update && cp -r /tmp/nebula_update/nebula-main/* /opt/aetherpanel/ && rm -rf /tmp/update.zip /tmp/nebula_update && cd /opt/aetherpanel && npm install && systemctl restart aetherpanel`);
         res.json({ success: true, mode: 'full' });
     } else if (type === 'hotfix') {
         io.emit('toast', { type: 'info', msg: '🎨 Aplicando parche visual...' });
@@ -157,7 +134,7 @@ app.post('/api/update/perform', async (req, res) => {
     }
 });
 
-// --- PROXY & UTILIDADES ---
+// --- PROXY VERSIONES ---
 app.post('/api/nebula/versions', async (req, res) => {
     const { type } = req.body;
     try {
@@ -193,7 +170,6 @@ app.get('/api/stats', (req, res) => {
     });
 });
 
-// --- CORE ROUTES ---
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:action', async (req, res) => { try{if(mcServer[req.params.action])await mcServer[req.params.action]();res.json({success:true});}catch(e){res.status(500).json({error:e.message});}});
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
@@ -290,11 +266,7 @@ class MCManager {
 module.exports = MCManager;
 EOF
 
-# ============================================================
-# 3. FRONTEND
-# ============================================================
-
-# --- INDEX.HTML ---
+# --- INDEX.HTML (FIXED VISUAL VERSION) ---
 cat <<'EOF' > /opt/aetherpanel/public/index.html
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
@@ -329,7 +301,7 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V...</span> <span>NEBULA</span></div></div>
+            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V1.2.2</span> <span>NEBULA</span></div></div>
             <nav>
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
@@ -351,7 +323,7 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
         </aside>
         <main>
             <header>
-                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">Loading...</span><span class="badge">Stable</span></div></div>
+                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">V1.2.2</span><span class="badge">Stable</span></div></div>
                 <div class="actions">
                     <button onclick="api('power/start')" class="btn-control start"><i class="fa-solid fa-play"></i></button>
                     <button onclick="api('power/restart')" class="btn-control restart"><i class="fa-solid fa-rotate-right"></i></button>
