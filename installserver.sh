@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.2.2 (UI PATCH)
-# - Fixed: "V..." placeholder removed.
-# - Default version hardcoded in HTML for instant rendering.
-# - Auto-Update & API Fixes included.
+# NEBULA PANEL - V1.2.3 (STABILITY PATCH)
+# - Critical Fix: Replaced Axios downloader with 'wget' (Native Linux)
+# - Fixed: All APIs (Vanilla/Forge/Fabric) now download correctly.
+# - Visual: Version hardcoded in HTML to avoid "..." flicker.
 # ============================================================
 clear
 set -e
@@ -15,12 +15,12 @@ PURPLE='\033[0;35m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${PURPLE}🌌 APLICANDO PARCHE VISUAL NEBULA V1.2.2...${NC}"
+echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.3 (STABLE)...${NC}"
 
 # ============================================================
 # 1. PREPARACIÓN
 # ============================================================
-# Auto-Sync Hora (Evita errores SSL/APT)
+# Sincronizar hora para evitar errores de SSL
 CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
 if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
@@ -30,15 +30,15 @@ rm -rf /opt/aetherpanel
 mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 
 # ============================================================
-# 2. GENERACIÓN DE ARCHIVOS
+# 2. BACKEND
 # ============================================================
 
 # --- PACKAGE.JSON ---
 cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
-  "version": "1.2.2",
-  "description": "Nebula V1.2.2 UI Patch",
+  "version": "1.2.3",
+  "description": "Nebula V1.2.3 Stability",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -53,7 +53,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 }
 EOF
 
-# --- SERVER.JS ---
+# --- SERVER.JS (BACKEND) ---
 cat <<'EOF' > /opt/aetherpanel/server.js
 const express = require('express');
 const http = require('http');
@@ -80,7 +80,7 @@ const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
 // GITHUB CONFIG
-const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.2' } });
+const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.3' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 const REPO_ZIP = 'https://github.com/reychampi/nebula/archive/refs/heads/main.zip';
 
@@ -89,7 +89,7 @@ app.get('/api/info', (req, res) => {
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         res.json({ version: pkg.version });
-    } catch (e) { res.json({ version: '1.2.2' }); }
+    } catch (e) { res.json({ version: '1.2.3' }); }
 });
 
 // --- UPDATER ---
@@ -190,15 +190,14 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => mcServer.sendCommand(cmd));
 });
 
-server.listen(3000, () => console.log('Nebula V1.2.2 running'));
+server.listen(3000, () => console.log('Nebula V1.2.3 running'));
 EOF
 
-# --- MC_MANAGER.JS ---
+# --- MC_MANAGER.JS (WGET FIX) ---
 cat <<'EOF' > /opt/aetherpanel/mc_manager.js
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 
 class MCManager {
     constructor(io) {
@@ -216,7 +215,7 @@ class MCManager {
     setUpdatePending(val, cb) {
         this.updatePending = val;
         this.updateCallback = cb;
-        this.io.emit('toast', {type:'info', msg:'Actualización en cola. Apaga el servidor para aplicar.'});
+        this.io.emit('toast', {type:'info', msg:'Actualización en cola. Apaga el servidor.'});
     }
 
     log(msg) { this.logs.push(msg); if(this.logs.length>2000)this.logs.shift(); this.io.emit('console_data', msg); }
@@ -226,7 +225,7 @@ class MCManager {
     async start() {
         if (this.status !== 'OFFLINE') return;
         if (this.updatePending) {
-            this.io.emit('toast', {type:'warning', msg:'Actualizando sistema antes de iniciar...'});
+            this.io.emit('toast', {type:'warning', msg:'Actualizando sistema...'});
             if(this.updateCallback) this.updateCallback();
             return; 
         }
@@ -247,26 +246,51 @@ class MCManager {
         this.process.stderr.on('data', d => this.log(d.toString()));
         this.process.on('close', () => { 
             this.status='OFFLINE'; this.process=null; this.io.emit('status_change', this.status); this.log('\r\nDetenido.\r\n');
-            if(this.updatePending && this.updateCallback) { this.io.emit('console_data', '\r\n>>> APLICANDO ACTUALIZACIÓN...\r\n'); this.updateCallback(); }
+            if(this.updatePending && this.updateCallback) { this.io.emit('console_data', '\r\n>>> ACTUALIZANDO...\r\n'); this.updateCallback(); }
         });
     }
     async stop() { if(this.process && this.status==='ONLINE') { this.status='STOPPING'; this.io.emit('status_change',this.status); this.process.stdin.write('stop\n'); return new Promise(r=>{let c=0;const i=setInterval(()=>{c++;if(this.status==='OFFLINE'||c>20){clearInterval(i);r()}},500)}); }}
     async restart() { await this.stop(); setTimeout(()=>this.start(), 3000); }
     async kill() { if(this.process) { this.process.kill('SIGKILL'); this.status='OFFLINE'; this.io.emit('status_change','OFFLINE'); }}
     sendCommand(c) { if(this.process) this.process.stdin.write(c+'\n'); }
+    
+    // --- FIX: USO DE WGET (INFALIBLE) ---
     async installJar(url, filename) {
-        this.io.emit('toast', {type:'info', msg:'Descargando...'});
+        this.io.emit('toast', {type:'info', msg:'Descargando núcleo...'});
+        this.log(`\r\nDescargando: ${url}\r\n`);
+        
+        // Limpiar
         fs.readdirSync(this.serverPath).forEach(f => { if(f.endsWith('.jar')) fs.unlinkSync(path.join(this.serverPath, f)); });
-        const w = fs.createWriteStream(path.join(this.serverPath, filename));
-        try { const r = await axios({url, method:'GET', responseType:'stream', headers: {'User-Agent': 'Nebula/1.2.2'}}); r.data.pipe(w); return new Promise((res, rej) => { w.on('finish', ()=>{this.io.emit('toast',{type:'success',msg:'Instalado'});res();}); w.on('error', rej); }); } catch(e) { throw e; }
+        
+        const target = path.join(this.serverPath, filename);
+        const cmd = `wget -q -O "${target}" "${url}"`; // -q = quiet, -O = output file
+        
+        return new Promise((resolve, reject) => {
+            exec(cmd, (error, stdout, stderr) => {
+                if (error) {
+                    this.io.emit('toast', {type:'error', msg:'Error al descargar'});
+                    this.log(`Error WGET: ${error.message}\n`);
+                    reject(error);
+                } else {
+                    this.io.emit('toast', {type:'success', msg:'Instalado correctamente'});
+                    this.log('Descarga completada.\n');
+                    resolve();
+                }
+            });
+        });
     }
+
     readProperties() { try{return fs.readFileSync(path.join(this.serverPath,'server.properties'),'utf8').split('\n').reduce((a,l)=>{const[k,v]=l.split('=');if(k&&!l.startsWith('#'))a[k.trim()]=v?v.trim():'';return a;},{});}catch{return{};} }
     writeProperties(p) { fs.writeFileSync(path.join(this.serverPath,'server.properties'), '#Gen by Nebula\n'+Object.entries(p).map(([k,v])=>`${k}=${v}`).join('\n')); }
 }
 module.exports = MCManager;
 EOF
 
-# --- INDEX.HTML (FIXED VISUAL VERSION) ---
+# ============================================================
+# 3. FRONTEND
+# ============================================================
+
+# --- INDEX.HTML ---
 cat <<'EOF' > /opt/aetherpanel/public/index.html
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
@@ -301,7 +325,7 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V1.2.2</span> <span>NEBULA</span></div></div>
+            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V1.2.3</span> <span>NEBULA</span></div></div>
             <nav>
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
@@ -323,7 +347,7 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
         </aside>
         <main>
             <header>
-                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">V1.2.2</span><span class="badge">Stable</span></div></div>
+                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">V1.2.3</span><span class="badge">Stable</span></div></div>
                 <div class="actions">
                     <button onclick="api('power/start')" class="btn-control start"><i class="fa-solid fa-play"></i></button>
                     <button onclick="api('power/restart')" class="btn-control restart"><i class="fa-solid fa-rotate-right"></i></button>
@@ -535,5 +559,5 @@ systemctl restart aetherpanel
 ufw allow 3000/tcp >/dev/null 2>&1
 IP=$(hostname -I | awk '{print $1}')
 echo -e "${CYAN}==========================================${NC}"
-echo -e "${CYAN}🌌 NEBULA V1.2.2 ONLINE: http://${IP}:3000${NC}"
+echo -e "${CYAN}🌌 NEBULA V1.2.3 ONLINE: http://${IP}:3000${NC}"
 echo -e "${CYAN}==========================================${NC}"
