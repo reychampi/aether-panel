@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA PANEL - V1.2.3 (STABILITY PATCH)
-# - Critical Fix: Replaced Axios downloader with 'wget' (Native Linux)
-# - Fixed: All APIs (Vanilla/Forge/Fabric) now download correctly.
-# - Visual: Version hardcoded in HTML to avoid "..." flicker.
+# NEBULA PANEL - V1.2.4 (SMART UPDATE FIX)
+# - Fixed: Auto-updater now detects ANY folder name inside the ZIP.
+# - Added: Debug logs for updates (/opt/aetherpanel/update.log).
+# - Fixed: Permissions reset after update.
 # ============================================================
 clear
 set -e
@@ -15,12 +15,12 @@ PURPLE='\033[0;35m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.3 (STABLE)...${NC}"
+echo -e "${PURPLE}🌌 INSTALANDO NEBULA V1.2.4 (SMART UPDATER)...${NC}"
 
 # ============================================================
 # 1. PREPARACIÓN
 # ============================================================
-# Sincronizar hora para evitar errores de SSL
+# Auto-Sync Hora
 CURRENT_DATE=$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)
 if [ ! -z "$CURRENT_DATE" ]; then date -s "$CURRENT_DATE" >/dev/null 2>&1; fi
 
@@ -37,8 +37,8 @@ mkdir -p /opt/aetherpanel/{servers/default,public,backups}
 cat <<'EOF' > /opt/aetherpanel/package.json
 {
   "name": "aetherpanel-nebula",
-  "version": "1.2.3",
-  "description": "Nebula V1.2.3 Stability",
+  "version": "1.2.4",
+  "description": "Nebula V1.2.4 SmartUpdate",
   "main": "server.js",
   "scripts": { "start": "node server.js" },
   "dependencies": {
@@ -53,7 +53,7 @@ cat <<'EOF' > /opt/aetherpanel/package.json
 }
 EOF
 
-# --- SERVER.JS (BACKEND) ---
+# --- SERVER.JS (UPDATER CORREGIDO) ---
 cat <<'EOF' > /opt/aetherpanel/server.js
 const express = require('express');
 const http = require('http');
@@ -80,19 +80,19 @@ const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
 // GITHUB CONFIG
-const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.3' } });
+const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.2.4' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 const REPO_ZIP = 'https://github.com/reychampi/nebula/archive/refs/heads/main.zip';
 
-// --- INFO API (VERSION CHECK) ---
+// --- INFO API ---
 app.get('/api/info', (req, res) => {
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         res.json({ version: pkg.version });
-    } catch (e) { res.json({ version: '1.2.3' }); }
+    } catch (e) { res.json({ version: '1.2.4' }); }
 });
 
-// --- UPDATER ---
+// --- UPDATER INTELIGENTE ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -118,10 +118,38 @@ app.get('/api/update/check', async (req, res) => {
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     if (type === 'full') {
-        io.emit('toast', { type: 'warning', msg: '🚀 Actualizando sistema...' });
-        exec(`wget ${REPO_ZIP} -O /tmp/update.zip && unzip -o /tmp/update.zip -d /tmp/nebula_update && cp -r /tmp/nebula_update/nebula-main/* /opt/aetherpanel/ && rm -rf /tmp/update.zip /tmp/nebula_update && cd /opt/aetherpanel && npm install && systemctl restart aetherpanel`);
+        io.emit('toast', { type: 'warning', msg: '🚀 Iniciando actualización inteligente...' });
+        
+        // COMANDO SMART UPDATE:
+        // 1. Descarga
+        // 2. Descomprime
+        // 3. Busca la carpeta descomprimida (sea cual sea el nombre)
+        // 4. Mueve contenido
+        // 5. Restaura permisos y reinicia
+        
+        const cmd = `
+            rm -rf /tmp/nebula_update && mkdir -p /tmp/nebula_update && \
+            wget ${REPO_ZIP} -O /tmp/update.zip >> /opt/aetherpanel/update.log 2>&1 && \
+            unzip -o /tmp/update.zip -d /tmp/nebula_update >> /opt/aetherpanel/update.log 2>&1 && \
+            EXTRACTED_DIR=$(ls /tmp/nebula_update | head -n 1) && \
+            cp -r /tmp/nebula_update/$EXTRACTED_DIR/* /opt/aetherpanel/ && \
+            rm -rf /tmp/update.zip /tmp/nebula_update && \
+            cd /opt/aetherpanel && \
+            chmod -R 755 . && \
+            npm install >> /opt/aetherpanel/update.log 2>&1 && \
+            systemctl restart aetherpanel
+        `;
+        
+        exec(cmd, (error) => {
+            if (error) {
+                fs.writeFileSync('/opt/aetherpanel/update_error.log', error.toString());
+                io.emit('toast', { type: 'error', msg: 'Fallo en actualización (Ver logs)' });
+            }
+        });
+        
         res.json({ success: true, mode: 'full' });
-    } else if (type === 'hotfix') {
+    } 
+    else if (type === 'hotfix') {
         io.emit('toast', { type: 'info', msg: '🎨 Aplicando parche visual...' });
         try {
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
@@ -190,10 +218,10 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => mcServer.sendCommand(cmd));
 });
 
-server.listen(3000, () => console.log('Nebula V1.2.3 running'));
+server.listen(3000, () => console.log('Nebula V1.2.4 running'));
 EOF
 
-# --- MC_MANAGER.JS (WGET FIX) ---
+# --- MC_MANAGER.JS ---
 cat <<'EOF' > /opt/aetherpanel/mc_manager.js
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -211,36 +239,20 @@ class MCManager {
         this.updatePending = false;
         this.updateCallback = null;
     }
-    
-    setUpdatePending(val, cb) {
-        this.updatePending = val;
-        this.updateCallback = cb;
-        this.io.emit('toast', {type:'info', msg:'Actualización en cola. Apaga el servidor.'});
-    }
-
+    setUpdatePending(val, cb) { this.updatePending = val; this.updateCallback = cb; this.io.emit('toast', {type:'info', msg:'Actualización en cola. Apaga el servidor.'}); }
     log(msg) { this.logs.push(msg); if(this.logs.length>2000)this.logs.shift(); this.io.emit('console_data', msg); }
     getStatus() { return { status: this.status, ram: this.ram }; }
     getRecentLogs() { return this.logs.join(''); }
     
     async start() {
         if (this.status !== 'OFFLINE') return;
-        if (this.updatePending) {
-            this.io.emit('toast', {type:'warning', msg:'Actualizando sistema...'});
-            if(this.updateCallback) this.updateCallback();
-            return; 
-        }
-        
+        if (this.updatePending) { this.io.emit('toast', {type:'warning', msg:'Actualizando sistema...'}); if(this.updateCallback) this.updateCallback(); return; }
         const eula = path.join(this.serverPath, 'eula.txt');
         if(!fs.existsSync(eula) || !fs.readFileSync(eula, 'utf8').includes('true')) fs.writeFileSync(eula, 'eula=true');
-        
         let jar = fs.readdirSync(this.serverPath).find(f => f.endsWith('.jar') && !f.includes('installer'));
         if (!jar) jar = fs.readdirSync(this.serverPath).find(f => f.includes('forge') && f.endsWith('.jar'));
         if (!jar) { this.io.emit('toast', { type: 'error', msg: 'No JAR found' }); return; }
-
-        this.status = 'STARTING';
-        this.io.emit('status_change', this.status);
-        this.log('\r\n>>> NEBULA: Iniciando...\r\n');
-        
+        this.status = 'STARTING'; this.io.emit('status_change', this.status); this.log('\r\n>>> NEBULA: Iniciando...\r\n');
         this.process = spawn('java', ['-Xmx'+this.ram, '-Xms'+this.ram, '-jar', jar, 'nogui'], { cwd: this.serverPath });
         this.process.stdout.on('data', d => { const s=d.toString(); this.log(s); if(s.includes('Done')||s.includes('For help')) { this.status='ONLINE'; this.io.emit('status_change', this.status); }});
         this.process.stderr.on('data', d => this.log(d.toString()));
@@ -253,33 +265,13 @@ class MCManager {
     async restart() { await this.stop(); setTimeout(()=>this.start(), 3000); }
     async kill() { if(this.process) { this.process.kill('SIGKILL'); this.status='OFFLINE'; this.io.emit('status_change','OFFLINE'); }}
     sendCommand(c) { if(this.process) this.process.stdin.write(c+'\n'); }
-    
-    // --- FIX: USO DE WGET (INFALIBLE) ---
     async installJar(url, filename) {
-        this.io.emit('toast', {type:'info', msg:'Descargando núcleo...'});
-        this.log(`\r\nDescargando: ${url}\r\n`);
-        
-        // Limpiar
+        this.io.emit('toast', {type:'info', msg:'Descargando núcleo...'}); this.log(`\r\nDescargando: ${url}\r\n`);
         fs.readdirSync(this.serverPath).forEach(f => { if(f.endsWith('.jar')) fs.unlinkSync(path.join(this.serverPath, f)); });
-        
         const target = path.join(this.serverPath, filename);
-        const cmd = `wget -q -O "${target}" "${url}"`; // -q = quiet, -O = output file
-        
-        return new Promise((resolve, reject) => {
-            exec(cmd, (error, stdout, stderr) => {
-                if (error) {
-                    this.io.emit('toast', {type:'error', msg:'Error al descargar'});
-                    this.log(`Error WGET: ${error.message}\n`);
-                    reject(error);
-                } else {
-                    this.io.emit('toast', {type:'success', msg:'Instalado correctamente'});
-                    this.log('Descarga completada.\n');
-                    resolve();
-                }
-            });
-        });
+        const cmd = `wget -q -O "${target}" "${url}"`;
+        return new Promise((resolve, reject) => { exec(cmd, (error) => { if (error) { this.io.emit('toast', {type:'error', msg:'Error al descargar'}); reject(error); } else { this.io.emit('toast', {type:'success', msg:'Instalado correctamente'}); resolve(); } }); });
     }
-
     readProperties() { try{return fs.readFileSync(path.join(this.serverPath,'server.properties'),'utf8').split('\n').reduce((a,l)=>{const[k,v]=l.split('=');if(k&&!l.startsWith('#'))a[k.trim()]=v?v.trim():'';return a;},{});}catch{return{};} }
     writeProperties(p) { fs.writeFileSync(path.join(this.serverPath,'server.properties'), '#Gen by Nebula\n'+Object.entries(p).map(([k,v])=>`${k}=${v}`).join('\n')); }
 }
@@ -313,19 +305,11 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
 <body>
     <div id="editor-modal" class="modal-overlay" style="display:none"><div class="modal glass"><div class="modal-header"><h3>Editor</h3><div><button class="btn btn-ghost" onclick="closeEditor()">Cerrar</button><button class="btn btn-primary" onclick="saveFile()">Guardar</button></div></div><div id="ace-editor"></div></div></div>
     <div id="version-modal" class="modal-overlay" style="display:none"><div class="modal glass version-modal"><div class="modal-header"><h3><i class="fa-solid fa-cloud"></i> Repositorio</h3><button class="btn btn-ghost" onclick="document.getElementById('version-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div><div class="mod-search"><input type="text" id="version-search" placeholder="Buscar versión..." class="search-input" autofocus><span id="loading-text" style="display:none;font-size:12px;color:var(--p)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span></div><div id="version-list" class="version-grid"></div></div></div>
-    
-    <div id="update-modal" class="modal-overlay" style="display:none">
-        <div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;">
-            <div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div>
-            <h3 id="up-title">Actualización</h3>
-            <p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p>
-            <div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div>
-        </div>
-    </div>
+    <div id="update-modal" class="modal-overlay" style="display:none"><div class="modal glass" style="height:auto; max-width:400px; text-align:center; padding:20px;"><div style="font-size:3rem; color:var(--p); margin-bottom:10px"><i class="fa-solid fa-bolt"></i></div><h3 id="up-title">Actualización</h3><p id="update-text" style="color:var(--muted); margin-bottom:20px">...</p><div id="up-actions" style="display:flex; flex-direction:column; gap:10px"></div></div></div>
 
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V1.2.3</span> <span>NEBULA</span></div></div>
+            <div class="brand"><div class="brand-logo"><i class="fa-solid fa-meteor"></i></div><div class="brand-text"><span id="sidebar-version-text">V1.2.4</span> <span>NEBULA</span></div></div>
             <nav>
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i> Monitor</button>
@@ -337,17 +321,13 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
                 <button onclick="setTab('config', this)" class="nav-btn"><i class="fa-solid fa-sliders"></i> Ajustes</button>
             </nav>
             <div class="sidebar-footer">
-                <div class="theme-switcher">
-                    <button onclick="setTheme('light')" class="theme-btn" title="Claro"><i class="fa-solid fa-sun"></i></button>
-                    <button onclick="setTheme('dark')" class="theme-btn active" title="Oscuro"><i class="fa-solid fa-moon"></i></button>
-                    <button onclick="setTheme('auto')" class="theme-btn" title="Sistema"><i class="fa-solid fa-desktop"></i></button>
-                </div>
+                <div class="theme-switcher"><button onclick="setTheme('light')" class="theme-btn" title="Claro"><i class="fa-solid fa-sun"></i></button><button onclick="setTheme('dark')" class="theme-btn active" title="Oscuro"><i class="fa-solid fa-moon"></i></button><button onclick="setTheme('auto')" class="theme-btn" title="Sistema"><i class="fa-solid fa-desktop"></i></button></div>
                 <div class="status-widget OFFLINE" id="status-widget"><div class="status-indicator"></div><span id="status-text">OFFLINE</span></div>
             </div>
         </aside>
         <main>
             <header>
-                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">V1.2.3</span><span class="badge">Stable</span></div></div>
+                <div class="server-info"><h1>Nebula Dashboard</h1><div class="badges"><span class="badge badge-primary" id="header-version">V1.2.4</span><span class="badge">Stable</span></div></div>
                 <div class="actions">
                     <button onclick="api('power/start')" class="btn-control start"><i class="fa-solid fa-play"></i></button>
                     <button onclick="api('power/restart')" class="btn-control restart"><i class="fa-solid fa-rotate-right"></i></button>
@@ -355,35 +335,12 @@ cat <<'EOF' > /opt/aetherpanel/public/index.html
                     <button onclick="api('power/kill')" class="btn-control kill"><i class="fa-solid fa-skull-crossbones"></i></button>
                 </div>
             </header>
-
-            <div id="tab-stats" class="tab-content active">
-                <div class="stats-grid">
-                    <div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div>
-                    <div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div>
-                    <div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div>
-                </div>
-            </div>
+            <div id="tab-stats" class="tab-content active"><div class="stats-grid"><div class="card glass"><div class="card-header"><h3>CPU</h3><span class="stat-value" id="cpu-val">0%</span></div><div class="chart-container"><canvas id="cpuChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>RAM</h3><span class="stat-value" id="ram-val">0 MB</span></div><div class="chart-container"><canvas id="ramChart"></canvas></div></div><div class="card glass"><div class="card-header"><h3>Disco</h3><span class="stat-value" id="disk-val">...</span></div><div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div></div></div></div>
             <div id="tab-console" class="tab-content"><div class="console-box glass"><div id="terminal"></div></div></div>
             <div id="tab-files" class="tab-content"><div class="card glass full"><div class="card-header"><div class="breadcrumb" id="file-breadcrumb">/root</div><div><button onclick="loadFileBrowser(currentPath)" class="btn btn-ghost"><i class="fa-solid fa-rotate"></i></button><button onclick="uploadFile()" class="btn btn-primary"><i class="fa-solid fa-upload"></i></button></div></div><div id="file-list" class="file-list"></div></div></div>
-            <div id="tab-versions" class="tab-content">
-                <h2 class="tab-title">Núcleos Disponibles</h2>
-                <div class="versions-container">
-                    <div class="version-card glass" onclick="loadVersions('vanilla')"><div class="v-icon" style="background:#27ae60"><i class="fa-solid fa-cube"></i></div><div class="v-info"><h3>Vanilla</h3><p>Oficial</p></div></div>
-                    <div class="version-card glass" onclick="loadVersions('paper')"><div class="v-icon" style="background:#2980b9"><i class="fa-solid fa-paper-plane"></i></div><div class="v-info"><h3>Paper</h3><p>Optimizado</p></div></div>
-                    <div class="version-card glass" onclick="loadVersions('fabric')"><div class="v-icon" style="background:#f39c12"><i class="fa-solid fa-scroll"></i></div><div class="v-info"><h3>Fabric</h3><p>Mods</p></div></div>
-                    <div class="version-card glass" onclick="loadVersions('forge')"><div class="v-icon" style="background:#c0392b"><i class="fa-solid fa-hammer"></i></div><div class="v-info"><h3>Forge</h3><p>Ilimitado</p></div></div>
-                </div>
-            </div>
+            <div id="tab-versions" class="tab-content"><h2 class="tab-title">Núcleos Disponibles</h2><div class="versions-container"><div class="version-card glass" onclick="loadVersions('vanilla')"><div class="v-icon" style="background:#27ae60"><i class="fa-solid fa-cube"></i></div><div class="v-info"><h3>Vanilla</h3><p>Oficial</p></div></div><div class="version-card glass" onclick="loadVersions('paper')"><div class="v-icon" style="background:#2980b9"><i class="fa-solid fa-paper-plane"></i></div><div class="v-info"><h3>Paper</h3><p>Optimizado</p></div></div><div class="version-card glass" onclick="loadVersions('fabric')"><div class="v-icon" style="background:#f39c12"><i class="fa-solid fa-scroll"></i></div><div class="v-info"><h3>Fabric</h3><p>Mods</p></div></div><div class="version-card glass" onclick="loadVersions('forge')"><div class="v-icon" style="background:#c0392b"><i class="fa-solid fa-hammer"></i></div><div class="v-info"><h3>Forge</h3><p>Ilimitado</p></div></div></div></div>
             <div id="tab-backups" class="tab-content"><div class="card glass full"><div class="card-header"><h3>Backups</h3><button onclick="createBackup()" class="btn btn-primary">Crear</button></div><div id="backup-list" class="file-list"></div></div></div>
-            <div id="tab-config" class="tab-content">
-                <div class="card glass full">
-                    <div class="card-header"><h3>Configuración</h3><button onclick="saveCfg()" class="btn btn-primary">Guardar</button></div>
-                    <div id="cfg-list" class="cfg-grid"></div>
-                    <div style="padding:20px;margin-top:20px;border-top:1px solid var(--border)">
-                        <button onclick="checkUpdate()" class="btn" style="background:#8b5cf6;width:100%;justify-content:center;border:1px solid var(--border)"><i class="fa-solid fa-rotate"></i> BUSCAR ACTUALIZACIONES</button>
-                    </div>
-                </div>
-            </div>
+            <div id="tab-config" class="tab-content"><div class="card glass full"><div class="card-header"><h3>Configuración</h3><button onclick="saveCfg()" class="btn btn-primary">Guardar</button></div><div id="cfg-list" class="cfg-grid"></div><div style="padding:20px;margin-top:20px;border-top:1px solid var(--border)"><button onclick="checkUpdate()" class="btn" style="background:#8b5cf6;width:100%;justify-content:center;border:1px solid var(--border)"><i class="fa-solid fa-rotate"></i> BUSCAR ACTUALIZACIONES</button></div></div></div>
         </main>
     </div>
     <script src="app.js"></script>
@@ -559,5 +516,5 @@ systemctl restart aetherpanel
 ufw allow 3000/tcp >/dev/null 2>&1
 IP=$(hostname -I | awk '{print $1}')
 echo -e "${CYAN}==========================================${NC}"
-echo -e "${CYAN}🌌 NEBULA V1.2.3 ONLINE: http://${IP}:3000${NC}"
+echo -e "${CYAN}🌌 NEBULA V1.2.4 ONLINE: http://${IP}:3000${NC}"
 echo -e "${CYAN}==========================================${NC}"
