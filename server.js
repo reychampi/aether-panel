@@ -37,22 +37,15 @@ app.get('/api/info', (req, res) => {
 // --- LOGICA DE ACTUALIZACIÓN HÍBRIDA ---
 app.get('/api/update/check', async (req, res) => {
     try {
-        // 1. Leer Local
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-        
-        // 2. Leer Remoto
         const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json`)).data;
         
-        // A. HARD UPDATE (Cambio de versión)
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         }
 
-        // B. SOFT UPDATE (Check visual files hash/content)
-        // Solo chequeamos index.html y style.css para velocidad
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
-        
         for (const f of files) {
             const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
             const localPath = path.join(__dirname, f);
@@ -66,7 +59,6 @@ app.get('/api/update/check', async (req, res) => {
         }
 
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
-        
         res.json({ type: 'none' });
 
     } catch (e) {
@@ -79,19 +71,10 @@ app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
 
     if (type === 'hard') {
-        // EJECUTAR SCRIPT EXTERNO Y MATAR PROCESO NODE
         io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización de sistema...' });
-        
-        // Spawn detached process
-        const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], {
-            detached: true,
-            stdio: 'ignore'
-        });
+        const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
         updater.unref();
-        
         res.json({ success: true, mode: 'hard' });
-        
-        // Dar tiempo al frontend para recibir la respuesta antes de morir
         setTimeout(() => process.exit(0), 1000);
     } 
     else if (type === 'soft') {
@@ -156,6 +139,27 @@ app.get('/api/backups', (req, res) => { if(!fs.existsSync(BACKUP_DIR)) fs.mkdirS
 app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); });
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
+
+// --- MOD INSTALLER API ---
+app.post('/api/mods/install', async (req, res) => {
+    const { url, name } = req.body;
+    const modsDir = path.join(SERVER_DIR, 'mods');
+    if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir);
+    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
+    const fileName = name.replace(/\s+/g, '_') + '.jar';
+    const target = path.join(modsDir, fileName);
+    const cmd = `wget -q -O "${target}" "${url}"`;
+    
+    exec(cmd, (error) => {
+        if (error) {
+            io.emit('toast', { type: 'error', msg: 'Error al descargar mod' });
+            res.json({ success: false });
+        } else {
+            io.emit('toast', { type: 'success', msg: `${name} instalado` });
+            res.json({ success: true });
+        }
+    });
+});
 
 io.on('connection', (socket) => {
     socket.emit('logs_history', mcServer.getRecentLogs());
