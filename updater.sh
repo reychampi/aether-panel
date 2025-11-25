@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA SMART UPDATER (FAIL-SAFE)
-# - Auto-Backup
-# - Health Check
-# - Auto-Rollback
+# NEBULA SMART UPDATER (V1.3.5 LOGO HUNTER)
+# - Busca logo.svg/ico en cualquier subcarpeta y los coloca bien.
+# - Rollback automático si el servidor crashea.
 # ============================================================
 
 LOG="/opt/aetherpanel/update.log"
@@ -14,67 +13,56 @@ REPO_ZIP="https://github.com/reychampi/nebula/archive/refs/heads/main.zip"
 
 echo "--- UPDATE START $(date) ---" > $LOG
 
-# 1. CREAR PUNTO DE RESTAURACIÓN (BACKUP)
-echo "Creating backup snapshot..." >> $LOG
+# 1. CREAR PUNTO DE RESTAURACIÓN (Seguridad)
+echo "Creating backup..." >> $LOG
 rm -rf $BACKUP_DIR
 cp -r $APP_DIR $BACKUP_DIR
 
 # 2. DETENER SERVICIO
 systemctl stop aetherpanel >> $LOG 2>&1
 
-# 3. DESCARGAR NUEVA VERSIÓN
-echo "Downloading update..." >> $LOG
+# 3. DESCARGAR Y DESCOMPRIMIR
+echo "Downloading..." >> $LOG
 rm -rf /tmp/nebula_update /tmp/update.zip
 mkdir -p /tmp/nebula_update
 wget -q $REPO_ZIP -O /tmp/update.zip
-
-# 4. DESCOMPRIMIR
-echo "Unzipping..." >> $LOG
 unzip -q -o /tmp/update.zip -d /tmp/nebula_update
 
-# 5. DETECTAR CARPETA RAÍZ (INTELIGENTE)
+# 4. INSTALACIÓN INTELIGENTE
+# Detectamos la carpeta raíz del ZIP
 EXTRACTED_DIR=$(ls /tmp/nebula_update | head -n 1)
-NEW_FILES="/tmp/nebula_update/$EXTRACTED_DIR"
+SOURCE="$tmp/nebula_update/$EXTRACTED_DIR"
 
-# 6. APLICAR ACTUALIZACIÓN (SOBRESCRIBIR)
-echo "Applying files..." >> $LOG
-cp -r $NEW_FILES/* $APP_DIR/ >> $LOG 2>&1
+echo "Copying core files..." >> $LOG
+# Copiamos todo recursivamente
+cp -rf /tmp/nebula_update/$EXTRACTED_DIR/* $APP_DIR/ >> $LOG 2>&1
 
-# 7. ORGANIZAR LOGOS (Para que no se pierdan)
-[ -f $APP_DIR/logo.svg ] && mv $APP_DIR/logo.svg $APP_DIR/public/
-[ -f $APP_DIR/logo.png ] && mv $APP_DIR/logo.png $APP_DIR/public/
-[ -f $APP_DIR/logo.ico ] && mv $APP_DIR/logo.ico $APP_DIR/public/
+# --- FIX LOGOS (RASTREADOR) ---
+# Busca los logos en la descarga y fuerzalos a /public
+echo "Hunting logos..." >> $LOG
+find /tmp/nebula_update -name "logo.svg" -exec cp {} $APP_DIR/public/ \;
+find /tmp/nebula_update -name "logo.ico" -exec cp {} $APP_DIR/public/ \;
+find /tmp/nebula_update -name "logo.png" -exec cp {} $APP_DIR/public/ \;
 
-# 8. LIMPIEZA DE BASURA
-rm -f $APP_DIR/installserver.sh $APP_DIR/README.md $APP_DIR/.gitignore
-
-# 9. RESTAURAR PERMISOS Y DEPENDENCIAS
+# 5. LIMPIEZA Y PERMISOS
+rm -f $APP_DIR/installserver.sh $APP_DIR/README.md
 chmod +x $APP_DIR/updater.sh
+chmod -R 755 $APP_DIR/public
 cd $APP_DIR
 npm install --production >> $LOG 2>&1
 
-# 10. PRUEBA DE ARRANQUE (HEALTH CHECK)
-echo "Testing new version..." >> $LOG
+# 6. HEALTH CHECK (Rollback si falla)
+echo "Testing boot..." >> $LOG
 systemctl start aetherpanel >> $LOG 2>&1
-
-# Esperamos 10 segundos para ver si el servicio aguanta encendido
 sleep 10
 
 if systemctl is-active --quiet aetherpanel; then
-    echo "✅ UPDATE SUCCESSFUL: System is stable." >> $LOG
-    # Éxito: Borramos el backup temporal
+    echo "✅ UPDATE SUCCESSFUL" >> $LOG
     rm -rf $BACKUP_DIR
 else
-    echo "🚨 UPDATE FAILED: System crashed. ROLLING BACK..." >> $LOG
-    
-    # --- FASE DE ROLLBACK (EMERGENCIA) ---
+    echo "🚨 CRASH DETECTED -> ROLLING BACK" >> $LOG
     systemctl stop aetherpanel
-    # Borramos la versión rota
     rm -rf $APP_DIR/*
-    # Restauramos la copia de seguridad
     cp -r $BACKUP_DIR/* $APP_DIR/
-    # Arrancamos la versión vieja que sí funcionaba
     systemctl start aetherpanel
-    
-    echo "✅ ROLLBACK COMPLETED: Restored previous version." >> $LOG
 fi
