@@ -25,27 +25,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 const mcServer = new MCManager(io);
-
-// Configuración GitHub
 const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.3.0' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
-
-// --- UTILIDAD: Calcular tamaño directorio recursivo ---
-const getDirSize = (dirPath) => {
-    let size = 0;
-    try {
-        if (fs.existsSync(dirPath)) {
-            const files = fs.readdirSync(dirPath);
-            files.forEach(file => {
-                const filePath = path.join(dirPath, file);
-                const stats = fs.statSync(filePath);
-                if (stats.isDirectory()) size += getDirSize(filePath);
-                else size += stats.size;
-            });
-        }
-    } catch(e) {}
-    return size;
-};
 
 // --- API: INFO & UPDATES ---
 app.get('/api/info', (req, res) => {
@@ -57,10 +38,7 @@ app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
-        
-        if (remotePkg.version !== localPkg.version) {
-            return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
-        }
+        if (remotePkg.version !== localPkg.version) return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
     } catch (e) { res.json({ type: 'error' }); }
 });
@@ -73,21 +51,45 @@ app.post('/api/update/perform', async (req, res) => {
         updater.unref();
         res.json({ success: true, mode: 'hard' });
         setTimeout(() => process.exit(0), 1000);
-    } 
-    else if (type === 'soft') {
-        // Este bloque ya casi no se usará con la lógica estricta, pero se mantiene por compatibilidad
-        res.json({ success: true, mode: 'soft' });
-    }
+    } else res.json({ success: true, mode: 'soft' });
 });
 
-// --- API: SETTINGS (RAM) ---
+// --- API: MONITOR Y ESTADO (CORREGIDA) ---
+app.get('/api/stats', (req, res) => { 
+    osUtils.cpuUsage((cpuPercent) => {
+        // Usamos el comando nativo 'du' para el disco (Más fiable que JS recursivo)
+        exec(`du -sb ${SERVER_DIR}`, (error, stdout) => {
+            let diskBytes = 0;
+            if (!error && stdout) {
+                // stdout devuelve algo como: "154030  /opt/..."
+                diskBytes = parseInt(stdout.split(/\s+/)[0]);
+            }
+
+            const cpus = os.cpus();
+            const cpuFreq = cpus.length > 0 ? cpus[0].speed : 0; 
+            const totalMem = os.totalmem(); // Bytes
+            const freeMem = os.freemem();   // Bytes
+            
+            res.json({
+                cpu: cpuPercent * 100, 
+                cpu_freq: cpuFreq,
+                ram_total: totalMem,
+                ram_free: freeMem,
+                ram_used: totalMem - freeMem,
+                disk_used: diskBytes,
+                disk_total: 20 * 1024 * 1024 * 1024 // 20GB en Bytes (Límite visual)
+            });
+        });
+    }); 
+});
+
+// --- RESTO DE APIs ---
 app.post('/api/settings', (req, res) => {
     try {
         const { ram } = req.body;
         if (ram) {
             fs.writeFileSync(path.join(__dirname, 'settings.json'), JSON.stringify({ ram }));
-            mcServer.loadSettings();
-            res.json({ success: true, ram });
+            mcServer.loadSettings(); res.json({ success: true, ram });
         } else res.status(400).json({ error: 'Missing RAM' });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -99,11 +101,9 @@ app.get('/api/settings', (req, res) => {
     } catch(e) { res.json({ ram: '4G' }); }
 });
 
-// --- API: MINECRAFT VERSIONES ---
 app.post('/api/nebula/versions', async (req, res) => {
     try {
-        const t = req.body.type;
-        let l = [];
+        const t = req.body.type; let l = [];
         if(t==='vanilla') l = (await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).data.versions.filter(v=>v.type==='release').map(v=>({id:v.id, url:v.url, type:'vanilla'}));
         else if(t==='paper') l = (await apiClient.get('https://api.papermc.io/v2/projects/paper')).data.versions.reverse().map(v=>({id:v, type:'paper'}));
         else if(t==='fabric') l = (await apiClient.get('https://meta.fabricmc.net/v2/versions/game')).data.filter(v=>v.stable).map(v=>({id:v.version, type:'fabric'}));
@@ -119,45 +119,18 @@ app.post('/api/nebula/versions', async (req, res) => {
 app.post('/api/nebula/resolve-vanilla', async (req, res) => { try { res.json({url: (await apiClient.get(req.body.url)).data.downloads.server.url}); } catch(e){res.status(500).json({});} });
 
 app.post('/api/mods/install', async (req, res) => {
-    const { url, name } = req.body;
-    const d = path.join(SERVER_DIR, 'mods');
+    const { url, name } = req.body; const d = path.join(SERVER_DIR, 'mods');
     if(!fs.existsSync(d)) fs.mkdirSync(d);
     io.emit('toast', {type:'info', msg:`Instalando ${name}...`});
     exec(`wget -q -O "${path.join(d, name.replace(/\s+/g,'_')+'.jar')}" "${url}"`, (e)=>{
-        if(e) io.emit('toast',{type:'error', msg:'Error al descargar mod'}); else io.emit('toast',{type:'success', msg:'Mod Instalado'});
+        if(e) io.emit('toast',{type:'error', msg:'Error al descargar'}); else io.emit('toast',{type:'success', msg:'Mod Instalado'});
     });
     res.json({success:true});
-});
-
-// --- API: MONITOR Y ESTADO (MEJORADA) ---
-app.get('/api/stats', (req, res) => { 
-    osUtils.cpuUsage((c) => { 
-        // 1. Calcular disco real (recursivo)
-        let diskUsedBytes = 0;
-        try { diskUsedBytes = getDirSize(SERVER_DIR); } catch(e) {}
-
-        // 2. Datos del Sistema (CPU/RAM)
-        const cpus = os.cpus();
-        const cpuFreq = cpus.length > 0 ? cpus[0].speed : 0; // MHz
-        const totalMem = os.totalmem() / 1048576; // MB
-        const freeMem = os.freemem() / 1048576; // MB
-        
-        res.json({
-            cpu: c * 100, 
-            cpu_freq: cpuFreq,
-            ram_used: totalMem - freeMem, 
-            ram_total: totalMem,
-            ram_free: freeMem,
-            disk_used: diskUsedBytes / 1048576, // MB
-            disk_total: 20480 // 20GB Límite visual
-        }); 
-    }); 
 });
 
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:a', async (req, res) => { try{ if(mcServer[req.params.a]) await mcServer[req.params.a](); res.json({success:true}); } catch(e){ res.status(500).json({}); } });
 
-// --- API: GESTOR DE ARCHIVOS ---
 app.get('/api/files', (req, res) => { 
     const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); 
     if(!fs.existsSync(t)) return res.json([]); 
@@ -176,7 +149,6 @@ app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACK
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
 
-// --- WEBSOCKETS ---
 io.on('connection', (s) => { 
     s.emit('logs_history', mcServer.getRecentLogs()); 
     s.emit('status_change', mcServer.status); 
