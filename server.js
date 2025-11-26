@@ -15,6 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const upload = multer({ dest: os.tmpdir() });
 
+// Asegurar directorios esenciales
 const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
@@ -25,9 +26,9 @@ app.use(express.json());
 
 const mcServer = new MCManager(io);
 
-// CAMBIO: Configuración de GitHub actualizada
-const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.3.0' } });
-const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
+// CONFIGURACIÓN DE GITHUB (Para Updates)
+const apiClient = axios.create({ headers: { 'User-Agent': 'Nebula-Panel/1.3.0' } });
+const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/nebula/main';
 
 // --- API: INFO DEL PANEL ---
 app.get('/api/info', (req, res) => {
@@ -37,30 +38,33 @@ app.get('/api/info', (req, res) => {
     } catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- API: CHECK UPDATES ---
+// --- API: CHECK UPDATES (Smart Logic) ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json`)).data;
-        
+
+        // 1. Hard Update (Cambio de Versión)
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         }
 
+        // 2. Soft Update (Cambios Visuales en /public)
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
-        
+
         for (const f of files) {
             try {
                 const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
                     const localContent = fs.readFileSync(localPath, 'utf8');
+                    // Comparamos strings para ver si hubo cambios reales
                     if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) {
                         hasChanges = true; break;
                     }
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
 
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
@@ -72,14 +76,17 @@ app.get('/api/update/check', async (req, res) => {
 // --- API: EJECUTAR UPDATE ---
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
-    
+
+    // HARD UPDATE: Llama al updater.sh y reinicia servicio
     if (type === 'hard') {
         io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización segura...' });
         const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
         updater.unref();
         res.json({ success: true, mode: 'hard' });
+        // Matamos el proceso de Node para dar paso al updater
         setTimeout(() => process.exit(0), 1000);
-    } 
+    }
+    // SOFT UPDATE: Sobrescribe archivos visuales en caliente
     else if (type === 'soft') {
         io.emit('toast', { type: 'info', msg: '🎨 Actualizando visuales...' });
         try {
@@ -88,155 +95,168 @@ app.post('/api/update/perform', async (req, res) => {
                 const c = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
                 fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
             }
+            // Intentar bajar logos actualizados
             exec(`wget -q -O /opt/aetherpanel/public/logo.svg ${REPO_RAW}/public/logo.svg`);
             exec(`wget -q -O /opt/aetherpanel/public/logo.ico ${REPO_RAW}/public/logo.ico`);
-            
+
             res.json({ success: true, mode: 'soft' });
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
 });
 
-// --- API: SETTINGS (RAM MANUAL) ---
-// Nuevo endpoint para guardar configuración
-app.post('/api/settings', (req, res) => {
-    try {
-        const { ram } = req.body;
-        if (ram) {
-            fs.writeFileSync(path.join(__dirname, 'settings.json'), JSON.stringify({ ram }));
-            mcServer.loadSettings(); // Recargar en caliente
-            res.json({ success: true, ram });
-        } else {
-            res.status(400).json({ error: 'Missing RAM parameter' });
-        }
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/settings', (req, res) => {
-    try {
-        if(fs.existsSync(path.join(__dirname, 'settings.json'))) {
-             res.json(JSON.parse(fs.readFileSync(path.join(__dirname, 'settings.json'), 'utf8')));
-        } else {
-             res.json({ ram: '4G' });
-        }
-    } catch(e) { res.json({ ram: '4G' }); }
-});
-
-// ... (Resto de APIs sin cambios lógicos graves, solo mantener estructura) ...
-// API: VERSIONES MINECRAFT
+// --- API: VERSIONES MINECRAFT (Mojang, Paper, Fabric, Forge) ---
 app.post('/api/nebula/versions', async (req, res) => {
     try {
         const t = req.body.type;
         let l = [];
-        if(t==='vanilla') l = (await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).data.versions.filter(v=>v.type==='release').map(v=>({id:v.id, url:v.url, type:'vanilla'}));
-        else if(t==='paper') l = (await apiClient.get('https://api.papermc.io/v2/projects/paper')).data.versions.reverse().map(v=>({id:v, type:'paper'}));
-        else if(t==='fabric') l = (await apiClient.get('https://meta.fabricmc.net/v2/versions/game')).data.filter(v=>v.stable).map(v=>({id:v.version, type:'fabric'}));
-        else if(t==='forge') {
+        if (t === 'vanilla') l = (await apiClient.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).data.versions.filter(v => v.type === 'release').map(v => ({ id: v.id, url: v.url, type: 'vanilla' }));
+        else if (t === 'paper') l = (await apiClient.get('https://api.papermc.io/v2/projects/paper')).data.versions.reverse().map(v => ({ id: v, type: 'paper' }));
+        else if (t === 'fabric') l = (await apiClient.get('https://meta.fabricmc.net/v2/versions/game')).data.filter(v => v.stable).map(v => ({ id: v.version, type: 'fabric' }));
+        else if (t === 'forge') {
             const p = (await apiClient.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json')).data.promos;
-            const s = new Set(); Object.keys(p).forEach(k=>{const v=k.split('-')[0]; if(v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v)});
-            l = Array.from(s).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true,sensitivity:'base'})).map(v=>({id:v, type:'forge'}));
+            const s = new Set(); Object.keys(p).forEach(k => { const v = k.split('-')[0]; if (v.match(/^\d+\.\d+(\.\d+)?$/)) s.add(v) });
+            l = Array.from(s).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' })).map(v => ({ id: v, type: 'forge' }));
         }
         res.json(l);
-    } catch(e) { res.status(500).json({error:'API Error'}); }
+    } catch (e) { res.status(500).json({ error: 'API Error' }); }
 });
 
-app.post('/api/nebula/resolve-vanilla', async (req, res) => { 
-    try { 
-        res.json({url: (await apiClient.get(req.body.url)).data.downloads.server.url}); 
-    } catch(e){res.status(500).json({});} 
+// Resolver URL real de Vanilla
+app.post('/api/nebula/resolve-vanilla', async (req, res) => {
+    try {
+        res.json({ url: (await apiClient.get(req.body.url)).data.downloads.server.url });
+    } catch (e) { res.status(500).json({}); }
 });
 
+// --- API: INSTALADOR DE MODS ---
 app.post('/api/mods/install', async (req, res) => {
     const { url, name } = req.body;
     const d = path.join(SERVER_DIR, 'mods');
-    if(!fs.existsSync(d)) fs.mkdirSync(d);
-    io.emit('toast', {type:'info', msg:`Instalando ${name}...`});
-    exec(`wget -q -O "${path.join(d, name.replace(/\s+/g,'_')+'.jar')}" "${url}"`, (e)=>{
-        if(e) io.emit('toast',{type:'error', msg:'Error al descargar mod'}); 
-        else io.emit('toast',{type:'success', msg:'Mod Instalado'});
+    if (!fs.existsSync(d)) fs.mkdirSync(d);
+
+    io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
+
+    exec(`wget -q -O "${path.join(d, name.replace(/\s+/g, '_') + '.jar')}" "${url}"`, (e) => {
+        if (e) io.emit('toast', { type: 'error', msg: 'Error al descargar mod' });
+        else io.emit('toast', { type: 'success', msg: 'Mod Instalado' });
     });
-    res.json({success:true});
+    res.json({ success: true });
 });
 
-app.get('/api/stats', (req, res) => { 
-    osUtils.cpuUsage((c) => { 
-        let d = 0; 
-        try{fs.readdirSync(SERVER_DIR).forEach(f=>{try{d+=fs.statSync(path.join(SERVER_DIR,f)).size}catch{}})}catch{} 
+// --- API: MONITOR Y ESTADO ---
+app.get('/api/stats', (req, res) => {
+    osUtils.cpuUsage((c) => {
+        let d = 0;
+        try { fs.readdirSync(SERVER_DIR).forEach(f => { try { d += fs.statSync(path.join(SERVER_DIR, f)).size } catch { } }) } catch { }
+
+        // Mock Network Data (since we can't easily get real-time throughput without native modules)
+        const network = os.networkInterfaces();
+        let netInfo = [];
+        for (const [name, net] of Object.entries(network)) {
+            if (!net[0].internal) netInfo.push({ name, address: net[0].address });
+        }
+
         res.json({
-            cpu: c * 100, 
-            ram_used: (os.totalmem() - os.freemem()) / 1048576, 
-            ram_total: os.totalmem() / 1048576, 
-            disk_used: d / 1048576, 
-            disk_total: 20480 
-        }); 
-    }); 
+            cpu: c * 100,
+            cpu_freq: os.cpus()[0].speed, // MHz
+            ram_used: (os.totalmem() - os.freemem()) / 1048576,
+            ram_total: os.totalmem() / 1048576,
+            ram_free: os.freemem() / 1048576,
+            disk_used: d / 1048576,
+            disk_total: 20480,
+            network: netInfo
+        });
+    });
 });
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 
-app.post('/api/power/:a', async (req, res) => { 
-    try{
-        if(mcServer[req.params.a]) await mcServer[req.params.a]();
-        res.json({success:true});
-    } catch(e){ res.status(500).json({}); }
+// --- API: CONTROLES DE ENERGÍA ---
+app.post('/api/power/:a', async (req, res) => {
+    try {
+        if (mcServer[req.params.a]) await mcServer[req.params.a]();
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({}); }
 });
 
-app.get('/api/files', (req, res) => { 
-    const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); 
-    if(!fs.existsSync(t)) return res.json([]); 
-    res.json(fs.readdirSync(t,{withFileTypes:true}).map(f=>({
-        name: f.name, 
-        isDir: f.isDirectory(), 
-        size: f.isDirectory() ? '-' : (fs.statSync(path.join(t,f.name)).size/1024).toFixed(1)+' KB'
-    })).sort((a,b)=>a.isDir===b.isDir?0:a.isDir?-1:1)); 
+// --- API: GESTOR DE ARCHIVOS ---
+app.get('/api/files', (req, res) => {
+    const t = path.join(SERVER_DIR, (req.query.path || '').replace(/\.\./g, ''));
+    if (!fs.existsSync(t)) return res.json([]);
+
+    res.json(fs.readdirSync(t, { withFileTypes: true }).map(f => ({
+        name: f.name,
+        isDir: f.isDirectory(),
+        size: f.isDirectory() ? '-' : (fs.statSync(path.join(t, f.name)).size / 1024).toFixed(1) + ' KB'
+    })).sort((a, b) => a.isDir === b.isDir ? 0 : a.isDir ? -1 : 1));
 });
-app.post('/api/files/read', (req, res) => { 
-    const p = path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')); 
-    if(fs.existsSync(p)) res.json({content: fs.readFileSync(p,'utf8')}); 
-    else res.status(404).json({}); 
+app.post('/api/files/read', (req, res) => {
+    const p = path.join(SERVER_DIR, req.body.file.replace(/\.\./g, ''));
+    if (fs.existsSync(p)) res.json({ content: fs.readFileSync(p, 'utf8') });
+    else res.status(404).json({});
 });
-app.post('/api/files/save', (req, res) => { 
-    fs.writeFileSync(path.join(SERVER_DIR, req.body.file.replace(/\.\./g,'')), req.body.content); 
-    res.json({success:true}); 
+app.post('/api/files/save', (req, res) => {
+    fs.writeFileSync(path.join(SERVER_DIR, req.body.file.replace(/\.\./g, '')), req.body.content);
+    res.json({ success: true });
 });
-app.post('/api/files/upload', upload.single('file'), (req, res) => { 
-    if(req.file){
-        fs.renameSync(req.file.path, path.join(SERVER_DIR, req.file.originalname)); 
-        res.json({success:true});
-    } else res.json({success:false}); 
+app.post('/api/files/upload', upload.single('file'), (req, res) => {
+    if (req.file) {
+        fs.renameSync(req.file.path, path.join(SERVER_DIR, req.file.originalname));
+        res.json({ success: true });
+    } else res.json({ success: false });
 });
 
+// --- API: CONFIGURACIÓN (server.properties & nebula.json) ---
 app.get('/api/config', (req, res) => res.json(mcServer.readProperties()));
-app.post('/api/config', (req, res) => { mcServer.writeProperties(req.body); res.json({success:true}); });
+app.post('/api/config', (req, res) => { mcServer.writeProperties(req.body); res.json({ success: true }); });
 
-app.post('/api/install', async (req, res) => { 
-    try{
+app.get('/api/nebula/config', (req, res) => res.json(mcServer.config));
+app.post('/api/nebula/config', (req, res) => { mcServer.updateConfig(req.body); res.json({ success: true }); });
+
+// --- API: MODRINTH PROXY (Search) ---
+app.get('/api/mods/search', async (req, res) => {
+    try {
+        const q = req.query.q || '';
+        const url = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(q)}&facets=[["project_type:mod"],["versions:1.20.1"],["categories:forge"]]&limit=20`;
+        const r = await axios.get(url, { headers: { 'User-Agent': 'Nebula-Panel/1.3.0' } });
+        res.json(r.data.hits);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// --- API: INSTALACIÓN JAR ---
+app.post('/api/install', async (req, res) => {
+    try {
+        if (req.body.ram) mcServer.setRam(req.body.ram);
         await mcServer.installJar(req.body.url, req.body.filename);
-        res.json({success:true});
-    } catch(e){ res.status(500).json({}); }
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({}); }
 });
 
-app.get('/api/backups', (req, res) => { 
-    if(!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR); 
-    res.json(fs.readdirSync(BACKUP_DIR).filter(f=>f.endsWith('.tar.gz')).map(f=>({
-        name: f, 
-        size: (fs.statSync(path.join(BACKUP_DIR,f)).size/1048576).toFixed(2)+' MB'
-    }))); 
+// --- API: BACKUPS ---
+app.get('/api/backups', (req, res) => {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR);
+    res.json(fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.tar.gz')).map(f => ({
+        name: f,
+        size: (fs.statSync(path.join(BACKUP_DIR, f)).size / 1048576).toFixed(2) + ' MB'
+    })));
 });
-app.post('/api/backups/create', (req, res) => { 
-    exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-'+Date.now()+'.tar.gz')}" -C "${path.join(__dirname,'servers')}" default`, (e)=>res.json({success:!e})); 
+app.post('/api/backups/create', (req, res) => {
+    exec(`tar -czf "${path.join(BACKUP_DIR, 'backup-' + Date.now() + '.tar.gz')}" -C "${path.join(__dirname, 'servers')}" default`, (e) => res.json({ success: !e }));
 });
-app.post('/api/backups/delete', (req, res) => { 
-    fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); 
-    res.json({success:true}); 
+app.post('/api/backups/delete', (req, res) => {
+    fs.unlinkSync(path.join(BACKUP_DIR, req.body.name));
+    res.json({ success: true });
 });
-app.post('/api/backups/restore', async (req, res) => { 
-    await mcServer.stop(); 
-    exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); 
-});
-
-io.on('connection', (s) => { 
-    s.emit('logs_history', mcServer.getRecentLogs()); 
-    s.emit('status_change', mcServer.status); 
-    s.on('command', (c) => mcServer.sendCommand(c)); 
+app.post('/api/backups/restore', async (req, res) => {
+    await mcServer.stop();
+    exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname, 'servers')}"`, (e) => res.json({ success: !e }));
 });
 
-server.listen(3000, () => console.log('Aether Panel V1.3.0 running on port 3000'));
+// --- WEBSOCKETS (Consola y Logs) ---
+io.on('connection', (s) => {
+    s.emit('logs_history', mcServer.getRecentLogs());
+    s.emit('status_change', mcServer.status);
+    s.on('command', (c) => mcServer.sendCommand(c));
+});
+
+// INICIAR SERVIDOR
+server.listen(3000, () => console.log('Nebula V1.3.0 running on port 3000'));
