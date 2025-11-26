@@ -15,6 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const upload = multer({ dest: os.tmpdir() });
 
+// Directorios
 const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
@@ -25,9 +26,26 @@ app.use(express.json());
 
 const mcServer = new MCManager(io);
 
-// CONFIGURACIÓN GITHUB (Aether Panel)
+// Configuración GitHub
 const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.3.0' } });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
+
+// --- UTILIDAD: Calcular tamaño directorio recursivo ---
+const getDirSize = (dirPath) => {
+    let size = 0;
+    try {
+        if (fs.existsSync(dirPath)) {
+            const files = fs.readdirSync(dirPath);
+            files.forEach(file => {
+                const filePath = path.join(dirPath, file);
+                const stats = fs.statSync(filePath);
+                if (stats.isDirectory()) size += getDirSize(filePath);
+                else size += stats.size;
+            });
+        }
+    } catch(e) {}
+    return size;
+};
 
 // --- API: INFO & UPDATES ---
 app.get('/api/info', (req, res) => {
@@ -38,34 +56,17 @@ app.get('/api/info', (req, res) => {
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-        const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json`)).data;
+        const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
         
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         }
-
-        // Check Visual Changes
-        let hasChanges = false;
-        const files = ['public/index.html', 'public/style.css', 'public/app.js'];
-        for (const f of files) {
-            try {
-                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
-                const localPath = path.join(__dirname, f);
-                if (fs.existsSync(localPath)) {
-                    const localContent = fs.readFileSync(localPath, 'utf8');
-                    if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) { hasChanges = true; break; }
-                }
-            } catch(e) {}
-        }
-        if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
-
     } catch (e) { res.json({ type: 'error' }); }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
-    
     if (type === 'hard') {
         io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización segura...' });
         const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
@@ -74,20 +75,8 @@ app.post('/api/update/perform', async (req, res) => {
         setTimeout(() => process.exit(0), 1000);
     } 
     else if (type === 'soft') {
-        io.emit('toast', { type: 'info', msg: '🎨 Actualizando visuales...' });
-        try {
-            const files = ['public/index.html', 'public/style.css', 'public/app.js'];
-            for (const f of files) {
-                const c = (await apiClient.get(`${REPO_RAW}/${f}`)).data;
-                fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
-            }
-            
-            // FORZAR DESCARGA DE LOGOS (NUEVO)
-            exec(`wget -q -O /opt/aetherpanel/public/logo.svg ${REPO_RAW}/public/logo.svg`);
-            exec(`wget -q -O /opt/aetherpanel/public/logo.ico ${REPO_RAW}/public/logo.ico`);
-            
-            res.json({ success: true, mode: 'soft' });
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        // Este bloque ya casi no se usará con la lógica estricta, pero se mantiene por compatibilidad
+        res.json({ success: true, mode: 'soft' });
     }
 });
 
@@ -110,7 +99,7 @@ app.get('/api/settings', (req, res) => {
     } catch(e) { res.json({ ram: '4G' }); }
 });
 
-// --- API: MINECRAFT ---
+// --- API: MINECRAFT VERSIONES ---
 app.post('/api/nebula/versions', async (req, res) => {
     try {
         const t = req.body.type;
@@ -140,15 +129,35 @@ app.post('/api/mods/install', async (req, res) => {
     res.json({success:true});
 });
 
+// --- API: MONITOR Y ESTADO (MEJORADA) ---
 app.get('/api/stats', (req, res) => { 
     osUtils.cpuUsage((c) => { 
-        let d = 0; try{fs.readdirSync(SERVER_DIR).forEach(f=>{try{d+=fs.statSync(path.join(SERVER_DIR,f)).size}catch{}})}catch{} 
-        res.json({ cpu: c * 100, ram_used: (os.totalmem() - os.freemem()) / 1048576, ram_total: os.totalmem() / 1048576, disk_used: d / 1048576, disk_total: 20480 }); 
+        // 1. Calcular disco real (recursivo)
+        let diskUsedBytes = 0;
+        try { diskUsedBytes = getDirSize(SERVER_DIR); } catch(e) {}
+
+        // 2. Datos del Sistema (CPU/RAM)
+        const cpus = os.cpus();
+        const cpuFreq = cpus.length > 0 ? cpus[0].speed : 0; // MHz
+        const totalMem = os.totalmem() / 1048576; // MB
+        const freeMem = os.freemem() / 1048576; // MB
+        
+        res.json({
+            cpu: c * 100, 
+            cpu_freq: cpuFreq,
+            ram_used: totalMem - freeMem, 
+            ram_total: totalMem,
+            ram_free: freeMem,
+            disk_used: diskUsedBytes / 1048576, // MB
+            disk_total: 20480 // 20GB Límite visual
+        }); 
     }); 
 });
+
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:a', async (req, res) => { try{ if(mcServer[req.params.a]) await mcServer[req.params.a](); res.json({success:true}); } catch(e){ res.status(500).json({}); } });
 
+// --- API: GESTOR DE ARCHIVOS ---
 app.get('/api/files', (req, res) => { 
     const t = path.join(SERVER_DIR, (req.query.path||'').replace(/\.\./g, '')); 
     if(!fs.existsSync(t)) return res.json([]); 
@@ -167,5 +176,11 @@ app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACK
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({success:true}); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname,'servers')}"`, (e)=>res.json({success:!e})); });
 
-io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
+// --- WEBSOCKETS ---
+io.on('connection', (s) => { 
+    s.emit('logs_history', mcServer.getRecentLogs()); 
+    s.emit('status_change', mcServer.status); 
+    s.on('command', (c) => mcServer.sendCommand(c)); 
+});
+
 server.listen(3000, () => console.log('Aether Panel V1.3.0 running on port 3000'));
