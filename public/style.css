@@ -1,4 +1,4 @@
-/* --- 1. VARIABLES Y BASE (NO BORRAR) --- */
+/* --- 1. VARIABLES Y BASE (OBLIGATORIO) --- */
 :root { 
     --bg: #0f0f13; 
     --sb: #050507; 
@@ -106,7 +106,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .stat-value { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.4rem; color: var(--txt); }
 .chart-container { height: 160px; position: relative; width: 100%; margin-top: auto; }
 
-/* --- 7. TUS ESTILOS PERSONALIZADOS (AÑADIDOS) --- */
+/* --- 7. TUS ESTILOS PERSONALIZADOS --- */
 .console-box { 
     height: calc(100vh - 240px); 
     background: var(--console-bg); 
