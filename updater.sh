@@ -1,75 +1,95 @@
 #!/bin/bash
 
 # ============================================================
-# NEBULA UPDATER - COMPATIBLE CON ESTRUCTURA GITHUB
-# Respeta la carpeta /public existente en el repositorio
+# AETHER PANEL - SMART UPDATER
+# Soft Update: Cambios en /public (Sin reinicio)
+# Hard Update: Cambio de versión en package.json (Con reinicio)
 # ============================================================
 
 LOG="/opt/aetherpanel/update.log"
 APP_DIR="/opt/aetherpanel"
-BACKUP_DIR="/opt/aetherpanel_backup_temp"
 REPO_ZIP="https://github.com/reychampi/nebula/archive/refs/heads/main.zip"
+TEMP_DIR="/tmp/nebula_update_temp"
 
-echo "--- UPDATE START $(date) ---" > $LOG
+# Función para loguear
+log_msg() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG
+    echo "$1"
+}
 
-# 1. BACKUP DE SEGURIDAD
-# Guardamos lo que tienes ahora por si acaso explota
-rm -rf $BACKUP_DIR
-cp -r $APP_DIR $BACKUP_DIR
+log_msg "--- CHECKING FOR UPDATES ---"
 
-# 2. DETENER SERVICIO
-# Paramos el panel para poder sobrescribir archivos en uso
-systemctl stop aetherpanel >> $LOG 2>&1
+# 1. LIMPIEZA Y DESCARGA
+rm -rf "$TEMP_DIR"
+mkdir -p "$TEMP_DIR"
 
-# 3. DESCARGAR Y DESCOMPRIMIR
-echo "Downloading & Unzipping..." >> $LOG
-rm -rf /tmp/nebula_update /tmp/update.zip
-mkdir -p /tmp/nebula_update
+# Descargamos el repo en una carpeta temporal
+wget -q "$REPO_ZIP" -O /tmp/nebula_update.zip || curl -L "$REPO_ZIP" -o /tmp/nebula_update.zip
+unzip -q -o /tmp/nebula_update.zip -d "$TEMP_DIR"
 
-# Intentamos wget, si falla usamos curl (robustez)
-wget -q $REPO_ZIP -O /tmp/update.zip || curl -L $REPO_ZIP -o /tmp/update.zip
-unzip -q -o /tmp/update.zip -d /tmp/nebula_update
+# Identificar la raíz descomprimida (donde está package.json)
+NEW_SOURCE=$(find "$TEMP_DIR" -name "package.json" | head -n 1 | xargs dirname)
 
-# 4. IDENTIFICAR LA RAÍZ DE LA DESCARGA
-# Buscamos dónde quedó el server.js descomprimido para saber la ruta base
-EXTRACTED_ROOT=$(find /tmp/nebula_update -name "server.js" | head -n 1 | xargs dirname)
-
-if [ -z "$EXTRACTED_ROOT" ]; then
-    echo "🚨 ERROR: Estructura del ZIP inválida. Abortando." >> $LOG
-    systemctl start aetherpanel
+if [ -z "$NEW_SOURCE" ]; then
+    log_msg "🚨 ERROR: Descarga corrupta o estructura inválida."
     exit 1
 fi
 
-# 5. APLICAR ACTUALIZACIÓN (SOBRESCRIBIR)
-echo "Syncing files..." >> $LOG
-# cp -rf copia recursivamente. Esto actualizará 'server.js' en la raíz
-# Y actualizará el contenido de 'public/' dentro de 'public/' automáticamente
-cp -rf "$EXTRACTED_ROOT"/* "$APP_DIR/" >> $LOG 2>&1
-
-# 6. LIMPIEZA Y PERMISOS (CRÍTICO)
-# Aseguramos que el script sea ejecutable para la próxima vez
-chmod +x $APP_DIR/updater.sh
-# Borramos basura que no necesitamos en prod
-rm -f $APP_DIR/README.md $APP_DIR/.gitignore $APP_DIR/installserver.sh
-
-# 7. DEPENDENCIAS
-cd $APP_DIR
-# Si el package.json cambió, instalamos lo nuevo.
-# 'npm ci' es mejor para instalaciones limpias, pero 'install' es más seguro si no hay package-lock.
-npm install --production >> $LOG 2>&1
-
-# 8. REINICIAR
-echo "Restarting..." >> $LOG
-systemctl start aetherpanel
-
-sleep 5
-if systemctl is-active --quiet aetherpanel; then
-    echo "✅ UPDATE SUCCESSFUL" >> $LOG
-    rm -rf $BACKUP_DIR
+# 2. LECTURA DE VERSIONES (Usando Node para precisión JSON)
+# Si no existe el package.json local (primera instalación), asumimos versión 0.0.0
+if [ -f "$APP_DIR/package.json" ]; then
+    CURRENT_VERSION=$(node -p "require('$APP_DIR/package.json').version")
 else
-    echo "🚨 FAILED. Restoring backup..." >> $LOG
-    systemctl stop aetherpanel
-    # Restauramos todo tal cual estaba
-    cp -rf $BACKUP_DIR/* $APP_DIR/
-    systemctl start aetherpanel
+    CURRENT_VERSION="0.0.0"
 fi
+
+NEW_VERSION=$(node -p "require('$NEW_SOURCE/package.json').version")
+
+log_msg "🔍 Versión Actual: $CURRENT_VERSION | Nueva Versión: $NEW_VERSION"
+
+# 3. LÓGICA DE ACTUALIZACIÓN
+
+# CASO A: CAMBIO DE VERSIÓN (HARD UPDATE)
+# Si las versiones son diferentes, reiniciamos todo.
+if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+    log_msg "⚠️  Cambio de versión detectado ($CURRENT_VERSION -> $NEW_VERSION). Iniciando HARD UPDATE."
+    
+    # Detener servicio
+    systemctl stop aetherpanel
+    
+    # Copiar TODO (Sobrescribe lógica y visual)
+    cp -rf "$NEW_SOURCE/"* "$APP_DIR/"
+    
+    # Instalar nuevas dependencias si las hay
+    cd "$APP_DIR"
+    npm install --production >> $LOG 2>&1
+    
+    # Restaurar permisos del updater
+    chmod +x "$APP_DIR/updater.sh"
+    
+    # Reiniciar servicio
+    systemctl start aetherpanel
+    log_msg "✅ Sistema actualizado y reiniciado."
+
+# CASO B: MISMA VERSIÓN (SOFT UPDATE / VISUAL CHECK)
+else
+    log_msg "ℹ️  Misma versión. Buscando cambios visuales en /public..."
+    
+    # Comparamos recursivamente solo la carpeta public
+    # diff -r -q devuelve 1 si hay diferencias, 0 si son iguales
+    diff -r -q "$APP_DIR/public" "$NEW_SOURCE/public" > /dev/null
+    
+    if [ $? -ne 0 ]; then
+        log_msg "🎨 Cambios visuales detectados. Aplicando SOFT UPDATE (Hot-swap)."
+        
+        # Solo copiamos la carpeta public
+        cp -rf "$NEW_SOURCE/public/"* "$APP_DIR/public/"
+        
+        log_msg "✅ Interfaz actualizada sin reiniciar el servicio."
+    else
+        log_msg "💤 No hay cambios visuales ni de sistema. Todo al día."
+    fi
+fi
+
+# Limpieza final
+rm -rf "$TEMP_DIR" /tmp/nebula_update.zip
