@@ -80,7 +80,7 @@
     <div class="app-layout">
         <aside class="sidebar">
             <div class="brand">
-                <div class="brand-logo"><i class="fa-solid fa-meteor"></i></div>
+                <div class="brand-logo"><img src="logo.svg" alt="Logo" style="width:24px;height:24px"></div>
                 <div class="brand-text">
                     <span class="version-badge" id="sidebar-version-text">V1.3.0</span>
                     <span class="brand-name">AETHER</span>
@@ -145,11 +145,16 @@
                         <div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div>
                     </div>
                 </div>
-                <div class="console-box" style="margin-top:24px"><div id="terminal"></div></div>
             </div>
 
             <div id="tab-console" class="tab-content">
+                <div class="console-box">
+                    <div style="padding-bottom:15px; border-bottom:1px solid var(--border); margin-bottom:15px; font-weight:700; color:var(--muted); display:flex; gap:10px; align-items:center; font-size:0.9rem;">
+                        <i class="fa-solid fa-terminal" style="color:var(--p)"></i> TERMINAL EN VIVO
+                    </div>
+                    <div id="terminal" style="flex:1; min-height:0;"></div>
                 </div>
+            </div>
 
             <div id="tab-files" class="tab-content">
                 <div class="card glass full">
