@@ -1,8 +1,3 @@
-Aquí tienes el código completo y definitivo para tu archivo **`README.md`**.
-
-He consolidado todos los cambios recientes (Instalador Universal, Versión 1.5.2, Soporte Multi-Distro y Nuevas Funcionalidades) en un único bloque de código listo para copiar.
-
-````markdown
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png" alt="Aether Panel Logo" width="120" height="120">
@@ -32,13 +27,14 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## 🐧 Sistemas Operativos Soportados
 
-Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a su instalador universal inteligente.
+Aether Panel está optimizado para distribuciones basadas en **Debian** que utilicen `systemd`.
 
-| Familia | Distribuciones Probadas | Gestor | Estado |
-| :--- | :--- | :--- | :--- |
-| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ **Nativo** |
-| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ **Nativo** |
-| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ **Nativo** |
+| Sistema Operativo | Versiones Recomendadas | Estado |
+| :--- | :--- | :--- |
+| **Ubuntu** | 20.04 LTS, 22.04 LTS, 24.04 LTS | ✅ **Nativo** |
+| **Debian** | 10 (Buster), 11 (Bullseye), 12 (Bookworm) | ✅ **Nativo** |
+| **Linux Mint** | 20+ | ⚠️ Compatible |
+| **CentOS / RHEL** | 8+ | ❌ No Soportado (Script usa apt) |
 
 ---
 
@@ -47,77 +43,69 @@ Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a 
 Esta versión introduce mejoras masivas en la Calidad de Vida (QoL) y la experiencia de usuario.
 
 ### 🎮 Experiencia de Usuario (UI/UX)
-* **Consola Interactiva:** Envía comandos al servidor directamente desde la web con una terminal dedicada.
-* **Sistema de Ayuda:** Tooltips `(?)` explicativos en todas las opciones del `server.properties`.
-* **Atajos de Teclado:** Navega rápido usando `Alt + 1-8` y cierra ventanas con `ESC`.
-* **IP Copiable:** Haz clic en la IP de la cabecera para copiarla al portapapeles.
+* **Consola Interactiva:** Ahora puedes escribir y enviar comandos directamente desde la interfaz web, con una caja de terminal dedicada.
+* **Sistema de Ayuda Inteligente:** Añadidos tooltips `(?)` en todas las opciones del `server.properties` que explican qué hace cada configuración al pasar el ratón.
+* **Atajos de Teclado:** Navega como un pro usando `Alt + 1` al `8` para cambiar pestañas y `ESC` para cerrar ventanas.
+* **IP en Cabecera:** Haz clic en la IP del servidor en la parte superior para copiarla al portapapeles al instante.
 
 ### 🛠️ Mejoras Técnicas
-* **Instalador Universal:** Detección automática de distro (Ubuntu/Fedora/Arch) e instalación de dependencias correspondientes.
-* **Actualizador UI:** Nuevo botón para forzar la actualización de la interfaz gráfica sin reiniciar el servidor.
-* **Soporte de Temas:** Compatibilidad total con Modo Claro y Oscuro en todos los menús.
-* **Resolución de Versiones:** Lógica mejorada para descargar Forge, Fabric y Paper sin errores.
+* **Actualizador de UI Independiente:** Nuevo botón para forzar la actualización de la interfaz gráfica (HTML/CSS/JS) sin reiniciar el servidor.
+* **Soporte de Temas:** Todos los menús, modales y ventanas emergentes ahora son 100% compatibles con el Modo Claro y Oscuro.
+* **Instalador de Versiones:** Lógica de descarga reescrita para evitar errores con Forge y Vanilla.
 
 ---
 
 ## 📦 Instalación Rápida
 
-Accede a tu terminal como usuario `root` y ejecuta el siguiente comando:
+Accede a tu terminal como usuario `root` y ejecuta el siguiente comando mágico:
 
 ```bash
 curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh) | bash
-````
 
 El instalador automático se encargará de:
 
-1.  **Detectar tu Sistema Operativo.**
-2.  Instalar dependencias necesarias (Java, Node.js, Git, Zip, Rsync).
-3.  Configurar el servicio automático `systemd`.
-4.  Descargar el núcleo del panel y los recursos.
-5.  Iniciar el servicio en el puerto **3000**.
+    Instalar dependencias (Java, Node.js, Git, Zip, Rsync).
 
------
+    Configurar el servicio automático systemd para que el panel se inicie solo.
 
-## ⚡ Características
+    Descargar el núcleo del panel y los recursos gráficos.
 
-  * **🖥️ Monitor en Tiempo Real:** Gráficas de CPU, RAM y Disco con actualización por Sockets.
-  * **💻 Consola Web:** Terminal en vivo con colores y envío de comandos.
-  * **📂 Gestor de Archivos:** Editor de texto integrado (Ace Editor) con resaltado de sintaxis.
-  * **📥 Instalador de Núcleos:** Descarga Vanilla, Paper, Fabric o Forge con un solo clic.
-  * **📦 Sistema de Backups:** Crea y restaura copias de seguridad en segundos.
-  * **🧩 Tienda de Mods:** Buscador integrado para instalar mods populares (JEI, JourneyMap, etc.).
-  * **⚙️ Configuración Visual:** Edita `server.properties` con interruptores y ayudas visuales.
-  * **🔄 Smart Updater:** Sistema de actualizaciones OTA (Over-The-Air) integrado.
+    Iniciar el servicio en el puerto 3000.
 
------
+⚡ Características
 
-## 🛠️ Solución de Problemas Frecuentes
+    🖥️ Monitor en Tiempo Real: Gráficas de CPU, RAM y Disco con actualización por Sockets.
 
-**El panel no carga en el navegador**
-Asegúrate de abrir el puerto 3000 en tu firewall:
+    💻 Consola Web: Terminal en vivo con colores y envío de comandos.
 
-  * **Ubuntu/Debian:**
-    ```bash
-    sudo ufw allow 3000/tcp
-    ```
-  * **Fedora/CentOS:**
-    ```bash
-    sudo firewall-cmd --permanent --add-port=3000/tcp
-    sudo firewall-cmd --reload
-    ```
+    📂 Gestor de Archivos: Editor de texto integrado (Ace Editor) con resaltado de sintaxis.
 
-**Error "command not found" o "$'\\r'" al instalar**
-Si subiste los archivos manualmente desde Windows, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
+    📥 Instalador de Núcleos: Descarga Vanilla, Paper, Fabric o Forge con un solo clic.
 
-```bash
+    📦 Sistema de Backups: Crea y restaura copias de seguridad en segundos.
+
+    🧩 Tienda de Mods: Instalador rápido para mods populares (JEI, JourneyMap, etc.) con buscador en tiempo real.
+
+    ⚙️ Configuración Visual: Edita server.properties con interruptores y ayudas visuales.
+
+    🔄 Smart Updater: Sistema de actualizaciones OTA (Over-The-Air) integrado que protege tus datos.
+
+🛠️ Solución de Problemas Frecuentes
+
+El panel no carga en el navegador Asegúrate de que el puerto 3000 está abierto en tu firewall:
+Bash
+
+sudo ufw allow 3000/tcp
+
+Si usas Oracle Cloud o AWS, abre también el puerto en el panel de seguridad de tu proveedor.
+
+Error "command not found" al instalar Si descargaste los archivos manualmente en Windows y los subiste, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
+Bash
+
 sed -i 's/\r$//' *.sh
-```
 
------
+<div align="center">
 
-\<div align="center"\>
+Desarrollado con ❤️ por ReyChampi Reportar un Bug
 
-**Desarrollado con ❤️ por ReyChampi**
-[Reportar un Bug](https://www.google.com/search?q=https://github.com/reychampi/aether-panel/issues)
-
-\</div\>
+</div>
