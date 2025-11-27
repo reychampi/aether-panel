@@ -178,7 +178,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .btn-icon { width: 36px; padding: 0; border-radius: 50%; }
 
 /* CONSOLE (FLEX FIX) */
-.console-box { height: calc(100vh - 240px); background: var(--console-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.5); }
+.console-box { height: calc(100vh - 240px); background: var(--console-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.5); }
 #terminal { flex: 1; min-height: 0; overflow: hidden; }
 .xterm-viewport { background: transparent !important; }
 /* La barra de comandos en el contexto de la consola */
@@ -312,6 +312,7 @@ input:checked + .slider:before { transform: translateX(24px); background-color: 
 .ram-range { flex: 1; -webkit-appearance: none; appearance: none; height: 6px; background: var(--glass-hover); border-radius: 5px; outline: none; }
 .ram-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--p); border: 2px solid white; cursor: pointer; }
 .ram-display { font-size: 1.5rem; font-weight: 800; color: var(--p-light); min-width: 80px; text-align: right; }
+
 
 
 
