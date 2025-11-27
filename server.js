@@ -27,9 +27,15 @@ if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// --- GESTOR MINECRAFT ---
 const mcServer = new MCManager(io);
-const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.5.1' }, timeout: 10000 });
-const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
+
+// --- CLIENTE API GITHUB ---
+const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.5.4' }, timeout: 10000 });
+// URL para descargar archivos (aún usa CDN raw, pero con cache-busting en soft update)
+const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main'; 
+// URL de la API (instantánea, sin caché de CDN)
+const GH_API_URL = 'https://api.github.com/repos/reychampi/aether-panel/contents/package.json?ref=main'; 
 
 // --- UTILIDADES ---
 const getDirSize = (dirPath) => {
@@ -53,7 +59,6 @@ function getServerIP() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const net of interfaces[name]) {
-            // Busca IPv4 que no sea interna (localhost)
             if (net.family === 'IPv4' && !net.internal) {
                 return net.address;
             }
@@ -66,9 +71,8 @@ function getServerIP() {
 //                 RUTAS API
 // ==========================================
 
-// --- NUEVO: API DE RED (IP) ---
+// --- API DE RED (IP) ---
 app.get('/api/network', (req, res) => {
-    // Intentamos leer el puerto del server.properties, si no 25565
     let port = 25565;
     try {
         const props = fs.readFileSync(path.join(SERVER_DIR, 'server.properties'), 'utf8');
@@ -90,29 +94,78 @@ app.get('/api/info', (req, res) => {
     } catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- ACTUALIZACIONES ---
+// --- SISTEMA DE ACTUALIZACIONES (FIJO ANTI-CACHÉ) ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-        const remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
         
+        // <<<<<<<<<< CAMBIO CRÍTICO: USAR API DE GITHUB PARA VERSIÓN (SIN CACHÉ) >>>>>>>>>>
+        const remoteResponse = (await apiClient.get(GH_API_URL)).data;
+        // Decodificar Base64 que viene de la API
+        const content = Buffer.from(remoteResponse.content, 'base64').toString();
+        const remotePkg = JSON.parse(content);
+        
+        // 1. Hard Update (Cambio de versión numérica)
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: 'hard', local: localPkg.version, remote: remotePkg.version });
         }
-        // Soft updates desactivadas por seguridad de tus cambios manuales
+
+        // 2. Soft Update (Cambios visuales)
+        const files = ['public/index.html', 'public/style.css', 'public/app.js'];
+        let hasChanges = false;
+        for (const f of files) {
+            try {
+                // Se usa REPO_RAW para archivos visuales, añadiendo timestamp para cache-busting
+                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
+                const localPath = path.join(__dirname, f);
+                if (fs.existsSync(localPath)) {
+                    const localContent = fs.readFileSync(localPath, 'utf8');
+                    if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) {
+                        hasChanges = true; 
+                        break;
+                    }
+                }
+            } catch(e) {}
+        }
+
+        if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
-    } catch (e) { res.json({ type: 'error' }); }
+
+    } catch (e) {
+        // Esto captura fallos de red o errores de JSON (como un 404)
+        console.error("UPDATE CHECK FAILED (API):", e.message); 
+        res.json({ type: 'error' });
+    }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
+    
     if (type === 'hard') {
         io.emit('toast', { type: 'warning', msg: '🔄 Iniciando actualización segura...' });
         const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
         updater.unref();
         res.json({ success: true, mode: 'hard' });
         setTimeout(() => process.exit(0), 1000);
-    } else res.json({ success: true, mode: 'soft' });
+    } 
+    else if (type === 'soft') {
+        io.emit('toast', { type: 'info', msg: '🎨 Actualizando visuales...' });
+        try {
+            const files = ['public/index.html', 'public/style.css', 'public/app.js'];
+            for (const f of files) {
+                // Se usa timestamp aquí también para forzar la descarga de los archivos raw
+                const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
+                fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
+            }
+            // Bajamos logos también
+            exec(`wget -q -O /opt/aetherpanel/public/logo.svg ${REPO_RAW}/public/logo.svg`);
+            exec(`wget -q -O /opt/aetherpanel/public/logo.ico ${REPO_RAW}/public/logo.ico`);
+            
+            res.json({ success: true, mode: 'soft' });
+        } catch (e) { 
+            res.status(500).json({ error: e.message }); 
+        }
+    }
 });
 
 // --- AJUSTES (RAM) ---
@@ -171,7 +224,7 @@ app.post('/api/mods/install', async (req, res) => {
     if (!fs.existsSync(d)) fs.mkdirSync(d);
     io.emit('toast', { type: 'info', msg: `Instalando ${name}...` });
     exec(`wget -q -O "${path.join(d, name.replace(/\s+/g, '_') + '.jar')}" "${url}"`, (e) => {
-        if (e) io.emit('toast', { type: 'error', msg: 'Error al descargar mod' }); else io.emit('toast', { type: 'success', msg: 'Mod Instalado' });
+        if (e) io.emit('toast', { type: 'error', msg: 'Error al descargar' }); else io.emit('toast', { type: 'success', msg: 'Mod Instalado' });
     });
     res.json({ success: true });
 });
@@ -196,7 +249,7 @@ app.get('/api/stats', (req, res) => {
                 ram_free: freeMem,
                 ram_used: totalMem - freeMem,
                 disk_used: diskBytes,
-                disk_total: 20 * 1024 * 1024 * 1024
+                disk_total: 20 * 1024 * 1024 * 1024 
             });
         });
     });
@@ -227,7 +280,8 @@ app.post('/api/backups/create', (req, res) => { exec(`tar -czf "${path.join(BACK
 app.post('/api/backups/delete', (req, res) => { fs.unlinkSync(path.join(BACKUP_DIR, req.body.name)); res.json({ success: true }); });
 app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); exec(`rm -rf "${SERVER_DIR}"/* && tar -xzf "${path.join(BACKUP_DIR, req.body.name)}" -C "${path.join(__dirname, 'servers')}"`, (e) => res.json({ success: !e })); });
 
-// --- SOCKET ---
+// --- SOCKET.IO ---
 io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
 
-server.listen(3000, () => console.log('Aether Panel V1.5.1 running on port 3000'));
+// --- ARRANQUE ---
+server.listen(3000, () => console.log('Aether Panel V1.5.4 (Anti-Cache) running on port 3000'));
