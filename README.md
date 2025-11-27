@@ -27,14 +27,14 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## 🐧 Sistemas Operativos Soportados
 
-Aether Panel está optimizado para distribuciones basadas en **Debian** que utilicen `systemd`.
+Gracias al nuevo **Instalador Universal**, Aether Panel ahora funciona en la mayoría de distribuciones Linux modernas.
 
-| Sistema Operativo | Versiones Recomendadas | Estado |
-| :--- | :--- | :--- |
-| **Ubuntu** | 20.04 LTS, 22.04 LTS, 24.04 LTS | ✅ **Nativo** |
-| **Debian** | 10 (Buster), 11 (Bullseye), 12 (Bookworm) | ✅ **Nativo** |
-| **Linux Mint** | 20+ | ⚠️ Compatible |
-| **CentOS / RHEL** | 8+ | ❌ No Soportado (Script usa apt) |
+| Familia | Distribuciones Probadas | Gestor de Paquetes | Estado |
+| :--- | :--- | :--- | :--- |
+| **Debian** | Ubuntu 20.04+, Debian 10+, Mint, Pop!_OS | `apt` | ✅ **Nativo** |
+| **RHEL** | Fedora 36+, CentOS Stream 8+, AlmaLinux, Rocky | `dnf` | ✅ **Nativo** |
+| **Arch** | Arch Linux, Manjaro, EndeavourOS | `pacman` | ✅ **Nativo** |
+| **Otros** | OpenSUSE, Alpine, etc. | Manual | ⚠️ Compatible (Instalación manual de dependencias) |
 
 ---
 
@@ -49,6 +49,7 @@ Esta versión introduce mejoras masivas en la Calidad de Vida (QoL) y la experie
 * **IP en Cabecera:** Haz clic en la IP del servidor en la parte superior para copiarla al portapapeles al instante.
 
 ### 🛠️ Mejoras Técnicas
+* **Instalador Universal:** Script inteligente que detecta tu distribución (Ubuntu, Fedora, Arch) e instala las dependencias correctas automáticamente.
 * **Actualizador de UI Independiente:** Nuevo botón para forzar la actualización de la interfaz gráfica (HTML/CSS/JS) sin reiniciar el servidor.
 * **Soporte de Temas:** Todos los menús, modales y ventanas emergentes ahora son 100% compatibles con el Modo Claro y Oscuro.
 * **Instalador de Versiones:** Lógica de descarga reescrita para evitar errores con Forge y Vanilla.
@@ -64,7 +65,9 @@ curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installs
 
 El instalador automático se encargará de:
 
-    Instalar dependencias (Java, Node.js, Git, Zip, Rsync).
+    Detectar tu Sistema Operativo.
+
+    Instalar dependencias (Java, Node.js, Git, Zip, Rsync) usando tu gestor (apt, dnf o pacman).
 
     Configurar el servicio automático systemd para que el panel se inicie solo.
 
@@ -92,12 +95,11 @@ El instalador automático se encargará de:
 
 🛠️ Solución de Problemas Frecuentes
 
-El panel no carga en el navegador Asegúrate de que el puerto 3000 está abierto en tu firewall:
-Bash
+El panel no carga en el navegador Asegúrate de que el puerto 3000 está abierto en tu firewall.
 
-sudo ufw allow 3000/tcp
+    Ubuntu/Debian: sudo ufw allow 3000/tcp
 
-Si usas Oracle Cloud o AWS, abre también el puerto en el panel de seguridad de tu proveedor.
+    Fedora/CentOS: sudo firewall-cmd --permanent --add-port=3000/tcp && sudo firewall-cmd --reload
 
 Error "command not found" al instalar Si descargaste los archivos manualmente en Windows y los subiste, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
 Bash
