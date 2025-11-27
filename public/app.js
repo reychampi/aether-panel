@@ -341,9 +341,16 @@ function doUpdate(type) {
         if (d.mode === 'hard') { Toastify({ text: 'Reiniciando...', style: { background: '#f59e0b' } }).showToast(); setTimeout(() => location.reload(), 8000); }
     });
 }
-// --- FUNCIÓN PARA FORZAR ACTUALIZACIÓN UI ---
+// --- NUEVA LÓGICA PARA FORZAR ACTUALIZACIÓN UI (Con Modal Bonito) ---
+// 1. Esta función solo abre el modal de confirmación
 function forceUIUpdate() {
-    if(!confirm('¿Quieres forzar la recarga de la interfaz gráfica?\nSe descargarán los últimos HTML, CSS y JS desde GitHub.')) return;
+    document.getElementById('force-ui-modal').style.display = 'flex';
+}
+
+// 2. Esta función se ejecuta al dar click en "CONFIRMAR Y ACTUALIZAR" en el modal
+function confirmForceUI() {
+    // Cerramos el modal primero
+    document.getElementById('force-ui-modal').style.display = 'none';
 
     Toastify({text: 'Descargando interfaz...', style:{background:'#8b5cf6'}}).showToast();
     
