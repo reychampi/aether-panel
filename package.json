@@ -1,7 +1,7 @@
 {
   "name": "aetherpanel-nebula",
-  "version": "1.4.3",
-  "description": "Nebula V1.4.3",
+  "version": "1.4.4",
+  "description": "Nebula V1.4.4",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
