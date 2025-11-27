@@ -204,50 +204,115 @@ function createBackup(){ api('backups/create').then(()=>setTimeout(loadBackups,2
 function deleteBackup(n){ if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups) }
 function restoreBackup(n){ if(confirm('¿Restaurar?'))api('backups/restore',{name:n}) }
 
-// --- CONFIGURATION TOOLTIPS ---
+// --- CONFIGURACIÓN & TOOLTIPS (DICCIONARIO COMPLETO) ---
 const propDesc = {
-    'online-mode': 'ACTIVADO: Solo cuentas Premium.\nDESACTIVADO: Permite No-Premium (Crackeado).',
-    'motd': 'Mensaje debajo del nombre del servidor.',
-    'max-players': 'Límite de jugadores.',
-    'server-port': 'Puerto del servidor (25565).',
-    'white-list': 'Solo usuarios en lista blanca pueden entrar.',
-    'pvp': 'Daño entre jugadores.',
-    'allow-flight': 'Permite volar en survival (anti-kick).',
-    'view-distance': 'Distancia de renderizado (chunks).',
-    'difficulty': 'peaceful, easy, normal, hard.',
-    'gamemode': 'survival, creative, adventure, spectator.',
-    'level-seed': 'Semilla del mundo.',
-    'spawn-protection': 'Radio protegido en el spawn.',
-    'hardcore': 'Ban al morir.',
-    'enable-command-block': 'Permitir bloques de comandos.'
+    // BÁSICOS
+    'online-mode': 'ACTIVADO: Solo cuentas Premium (Mojang).\nDESACTIVADO: Permite cuentas No-Premium (Crackeado).',
+    'motd': 'El mensaje que aparece debajo del nombre del servidor en la lista multijugador.',
+    'max-players': 'Número máximo de jugadores que pueden entrar al mismo tiempo.',
+    'server-port': 'Puerto de conexión (Por defecto 25565).',
+    'server-ip': 'Déjalo vacío para usar todas las IPs disponibles (Recomendado).',
+    'enable-status': 'Si está desactivado, el servidor aparecerá como "Offline" en la lista.',
+    'hide-online-players': 'Oculta la lista de jugadores al pasar el ratón en el menú.',
+
+    // JUGABILIDAD
+    'gamemode': 'Modo de juego por defecto: survival, creative, adventure, spectator.',
+    'force-gamemode': 'Si se activa, obliga a los jugadores a usar el modo por defecto al entrar.',
+    'difficulty': 'Dificultad: peaceful, easy, normal, hard.',
+    'hardcore': 'Si se activa, los jugadores son baneados al morir (Modo Extremo).',
+    'pvp': 'Si está activo, los jugadores pueden hacerse daño entre sí.',
+    'allow-flight': 'Permite volar en modo supervivencia (Anti-Kick).',
+    'player-idle-timeout': 'Minutos para expulsar a jugadores ausentes (AFK). 0 desactiva.',
+    
+    // MUNDO
+    'level-seed': 'Semilla para generar el mundo.',
+    'level-name': 'Nombre de la carpeta del mundo.',
+    'level-type': 'Tipo de mapa: minecraft:normal, flat, large_biomes, amplified.',
+    'generate-structures': 'Generar aldeas, fortalezas, etc.',
+    'allow-nether': 'Permite viajar al Nether.',
+    'spawn-protection': 'Radio de bloques protegidos en el Spawn.',
+    'max-world-size': 'Radio máximo del mundo (Borde).',
+    'max-build-height': 'Altura máxima de construcción.',
+    'view-distance': 'Distancia de renderizado (chunks). Menos = Menos Lag.',
+    'simulation-distance': 'Distancia de actualización de entidades/cultivos.',
+
+    // TÉCNICO
+    'white-list': 'Solo jugadores en lista blanca pueden entrar.',
+    'enforce-whitelist': 'Expulsa a jugadores conectados si no están en la lista blanca.',
+    'enable-command-block': 'Permite bloques de comandos.',
+    'enable-rcon': 'Habilita acceso remoto a la consola.',
+    'rcon.port': 'Puerto RCON.',
+    'rcon.password': 'Contraseña RCON.',
+    'rate-limit': 'Límite de paquetes (Anti-Spam). 0 desactiva.',
+    'network-compression-threshold': 'Compresión de paquetes. Recomendado: 256.',
+    'max-tick-time': 'Tiempo máximo por tick antes de cerrar (Watchdog). -1 desactiva.',
+    'sync-chunk-writes': 'Escritura síncrona de chunks (Más seguro, más lento).',
+    
+    // RECURSOS
+    'resource-pack': 'URL directa del paquete de recursos.',
+    'require-resource-pack': 'Desconecta si rechazan el paquete de recursos.'
 };
 
 function loadCfg() { 
     fetch('/api/config').then(r => r.json()).then(d => { 
-        const c = document.getElementById('cfg-list'); c.innerHTML = ''; 
-        if(Object.keys(d).length === 0) { c.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">⚠️ Inicia el servidor una vez para generar el archivo server.properties</p>'; return; }
+        const c = document.getElementById('cfg-list'); 
+        c.innerHTML = ''; 
+        
+        if(Object.keys(d).length === 0) { 
+            c.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">⚠️ Inicia el servidor una vez para generar el archivo server.properties</p>'; 
+            return; 
+        }
+
         const entries = Object.entries(d).sort((a,b) => a[0] === 'online-mode' ? -1 : 1);
+
         for(const [k, v] of entries) {
-            const tooltip = propDesc[k] ? `<span class="help-icon" data-tooltip="${propDesc[k]}">?</span>` : '';
-            let displayKey = k; if(k === 'online-mode') displayKey = 'Modo Premium (Online Mode)';
+            // Buscar descripción o poner genérica si no existe
+            const desc = propDesc[k] || 'Configuración avanzada.';
+            const tooltip = `<span class="help-icon" data-tooltip="${desc}">?</span>`;
+            
+            let displayKey = k; 
+            if(k === 'online-mode') displayKey = 'Modo Premium (Online Mode)';
+
             if(v === 'true' || v === 'false') {
-                const ch = v === 'true'; const lbl = ch ? 'Activado' : 'Desactivado'; 
-                c.innerHTML += `<div class="cfg-item"><label class="cfg-label" style="display:flex;align-items:center">${displayKey} ${tooltip}</label><div class="cfg-switch-wrapper"><span style="font-size:0.8rem;color:var(--muted)">${lbl}</span><label class="switch"><input type="checkbox" class="cfg-bool" data-k="${k}" ${ch?'checked':''} onchange="this.parentElement.previousElementSibling.innerText=this.checked?'Activado':'Desactivado'"><span class="slider round"></span></label></div></div>`;
+                const ch = v === 'true'; 
+                const lbl = ch ? 'Activado' : 'Desactivado'; 
+                
+                c.innerHTML += `
+                <div class="cfg-item">
+                    <label class="cfg-label" style="display:flex;align-items:center">
+                        ${displayKey} ${tooltip}
+                    </label>
+                    <div class="cfg-switch-wrapper">
+                        <span style="font-size:0.8rem;color:var(--muted)">${lbl}</span>
+                        <label class="switch">
+                            <input type="checkbox" class="cfg-bool" data-k="${k}" ${ch?'checked':''} 
+                                   onchange="this.parentElement.previousElementSibling.innerText=this.checked?'Activado':'Desactivado'">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>`;
             } else {
-                c.innerHTML += `<div class="cfg-item"><label class="cfg-label" style="display:flex;align-items:center">${k} ${tooltip}</label><input type="text" class="cfg-in" data-k="${k}" value="${v}"></div>`;
+                c.innerHTML += `
+                <div class="cfg-item">
+                    <label class="cfg-label" style="display:flex;align-items:center">
+                        ${k} ${tooltip}
+                    </label>
+                    <input type="text" class="cfg-in" data-k="${k}" value="${v}">
+                </div>`;
             }
         } 
-    }).catch(e => console.error(e));
+    }).catch(e => console.error("Error cargando config:", e));
 }
 
 function saveCfg() { 
     const d = {}; 
     document.querySelectorAll('.cfg-in').forEach(i => d[i.dataset.k] = i.value); 
     document.querySelectorAll('.cfg-bool').forEach(i => d[i.dataset.k] = i.checked ? 'true' : 'false');
-    api('config', d); Toastify({text:'Configuración Guardada', style:{background:'#10b981'}}).showToast(); 
+    api('config', d); 
+    Toastify({text:'Configuración Guardada', style:{background:'#10b981'}}).showToast(); 
 }
 
-// --- UPDATER ---
+// --- UPDATER (Mantenemos igual) ---
 checkUpdate(true);
 function checkUpdate(isAuto = false) {
     if (!isAuto) Toastify({ text: 'Buscando actualizaciones...', style: { background: 'var(--p)' } }).showToast();
@@ -258,6 +323,7 @@ function checkUpdate(isAuto = false) {
 }
 function showUpdateModal(d) {
     const m = document.getElementById('update-modal');
+    if(!m) return;
     const t = document.getElementById('update-text');
     const a = document.getElementById('up-actions');
     const ti = document.getElementById('up-title');
