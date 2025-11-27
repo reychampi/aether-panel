@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether Panel</title>
-    <link rel="icon" href="logo.ico" type="image/x-icon">
+    <link rel="icon" href="/logo.ico" type="image/x-icon">
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
@@ -37,14 +38,14 @@
         <div class="modal glass version-modal">
             <div class="modal-header">
                 <h3><i class="fa-solid fa-cloud"></i> Repositorio</h3>
-                <button class="btn btn-ghost btn-icon" onclick="document.getElementById('version-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
+                <button class="btn btn-ghost btn-icon" onclick="closeAllModals()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="mod-search" style="padding:0 24px 20px 24px">
                 <div class="search-wrapper">
                     <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                    <input type="text" id="version-search" placeholder="Buscar versión..." class="search-input" autofocus>
+                    <input type="text" id="store-search" placeholder="Buscar..." class="search-input" autofocus>
                 </div>
-                <span id="loading-text" style="display:none;font-size:12px;color:var(--p)"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span>
+                <span id="loading-text" style="display:none;font-size:12px;color:var(--p);margin-top:10px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</span>
             </div>
             <div id="version-list" class="version-grid"></div>
         </div>
@@ -78,11 +79,12 @@
     </div>
 
     <div class="app-layout">
+        
         <aside class="sidebar">
             <div class="brand">
                 <div class="brand-logo"><img src="/logo.svg" alt="Logo" style="width:24px;height:24px"></div>
                 <div class="brand-text">
-                    <span class="version-badge" id="sidebar-version-text">V1.3.0</span>
+                    <span class="version-badge" id="sidebar-version-text">V1.5.0</span>
                     <span class="brand-name">AETHER</span>
                 </div>
             </div>
@@ -90,6 +92,7 @@
                 <div class="nav-label">CORE</div>
                 <button onclick="setTab('stats', this)" class="nav-btn active"><i class="fa-solid fa-chart-simple"></i><span>Monitor</span></button>
                 <button onclick="setTab('console', this)" class="nav-btn"><i class="fa-solid fa-terminal"></i><span>Consola</span></button>
+                
                 <div class="nav-label">DATA</div>
                 <button onclick="setTab('files', this)" class="nav-btn"><i class="fa-solid fa-folder-tree"></i><span>Archivos</span></button>
                 <button onclick="setTab('versions', this)" class="nav-btn"><i class="fa-solid fa-layer-group"></i><span>Núcleos</span></button>
@@ -114,12 +117,20 @@
         <main>
             <header>
                 <div class="server-info">
-                    <h1>Aether Panel</h1>
-                    <div class="badges">
-                        <span class="badge badge-primary" id="header-version">V1.3.0</span>
-                        <span class="badge badge-success">Stable</span>
+                    <div style="display:flex; align-items:center; gap:15px;">
+                        <h1>Aether Panel</h1>
+                        <div class="badges">
+                            <span class="badge badge-primary" id="header-version">V1.5.0</span>
+                            <span class="badge badge-success">Stable</span>
+                        </div>
+                    </div>
+                    <div class="server-ip-box" onclick="copyIP()" title="Click para copiar IP">
+                        <i class="fa-solid fa-network-wired"></i>
+                        <span id="server-ip-display">Cargando IP...</span>
+                        <i class="fa-regular fa-copy" style="margin-left:auto;opacity:0.5"></i>
                     </div>
                 </div>
+
                 <div class="actions">
                     <button onclick="api('power/start')" class="btn-control start" title="Iniciar"><i class="fa-solid fa-play"></i></button>
                     <button onclick="api('power/restart')" class="btn-control restart" title="Reiniciar"><i class="fa-solid fa-rotate-right"></i></button>
@@ -149,10 +160,18 @@
 
             <div id="tab-console" class="tab-content">
                 <div class="console-box">
-                    <div style="padding-bottom:15px; border-bottom:1px solid var(--border); margin-bottom:15px; font-weight:700; color:var(--muted); display:flex; gap:10px; align-items:center; font-size:0.9rem;">
-                        <i class="fa-solid fa-terminal" style="color:var(--p)"></i> TERMINAL EN VIVO
+                    <div style="padding-bottom:10px; border-bottom:1px solid var(--border); font-weight:700; color:var(--muted); display:flex; justify-content:space-between; align-items:center; font-size:0.9rem;">
+                        <span><i class="fa-solid fa-terminal" style="color:var(--p)"></i> TERMINAL EN VIVO</span>
                     </div>
+                    
                     <div id="terminal" style="flex:1; min-height:0;"></div>
+                    
+                    <div class="search-wrapper" style="margin-top:10px;">
+                        <i class="fa-solid fa-chevron-right search-icon" style="color:var(--p)"></i>
+                        <input type="text" id="console-input" placeholder="Escribe un comando..." class="search-input" 
+                               onkeydown="if(event.key==='Enter') sendConsoleCommand()">
+                        <button class="btn btn-sm btn-primary" onclick="sendConsoleCommand()">Enviar</button>
+                    </div>
                 </div>
             </div>
 
@@ -219,7 +238,7 @@
                 <div class="card glass full">
                     <div class="card-header">
                         <h3><i class="fa-solid fa-gear"></i> Configuración</h3>
-                        <button onclick="saveCfg()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+                        <button onclick="saveNebulaConfig()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
                     </div>
 
                     <h4 style="margin-bottom:15px;color:var(--p-light)">Personalización</h4>
@@ -244,7 +263,6 @@
                     </div>
 
                     <h4 style="margin-bottom:15px;color:var(--p-light);margin-top:20px">Propiedades (server.properties)</h4>
-                    
                     <div id="cfg-list" class="cfg-grid"></div>
 
                     <div class="config-footer">
