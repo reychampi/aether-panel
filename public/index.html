@@ -265,8 +265,18 @@
                     <h4 style="margin-bottom:15px;color:var(--p-light);margin-top:20px">Propiedades (server.properties)</h4>
                     <div id="cfg-list" class="cfg-grid"></div>
 
-                    <div class="config-footer">
-                        <button onclick="checkUpdate()" class="btn btn-update"><i class="fa-solid fa-rotate"></i><span>BUSCAR ACTUALIZACIONES</span></button>
+                    <div id="cfg-list" class="cfg-grid"></div>
+
+                    <div class="config-footer" style="gap: 20px;">
+                        <button onclick="checkUpdate()" class="btn btn-update">
+                            <i class="fa-solid fa-rotate"></i>
+                            <span>BUSCAR ACTUALIZACIONES</span>
+                        </button>
+
+                        <button onclick="forceUIUpdate()" class="btn btn-update" style="border-color: var(--p-light); color: var(--p-light);">
+                            <i class="fa-solid fa-paintbrush"></i>
+                            <span>ACTUALIZAR UI (GRÁFICA)</span>
+                        </button>
                     </div>
                 </div>
             </div>
