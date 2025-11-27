@@ -11,7 +11,7 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 [![Status](https://img.shields.io/badge/status-stable-10b981?style=for-the-badge)](https://github.com/reychampi/aether-panel)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D16-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
 
-[Instalación](#-instalación-rápida) • [Características](#-características) • [Changelog](#-novedades-v14x)
+[Instalación](#-instalación-rápida) • [Sistemas Compatibles](#-sistemas-operativos-soportados) • [Características](#-características)
 
 </div>
 
@@ -22,45 +22,57 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 **Aether Panel** es una solución todo-en-uno para administrar servidores de Minecraft en entornos Linux. Diseñado para ser visualmente impactante y técnicamente robusto, elimina la necesidad de configuraciones complejas por terminal, ofreciendo una interfaz web reactiva y fácil de usar.
 
 ![Dashboard Preview](https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png)
-*(Nota: Se recomienda subir una captura de pantalla real del panel y reemplazar este link)*
+
+---
+
+## 🐧 Sistemas Operativos Soportados
+
+Aether Panel está optimizado para distribuciones basadas en **Debian** que utilicen `systemd`.
+
+| Sistema Operativo | Versiones Recomendadas | Estado |
+| :--- | :--- | :--- |
+| **Ubuntu** | 20.04 LTS, 22.04 LTS, 24.04 LTS | ✅ **Nativo** |
+| **Debian** | 10 (Buster), 11 (Bullseye), 12 (Bookworm) | ✅ **Nativo** |
+| **Linux Mint** | 20+ | ⚠️ Compatible |
+| **CentOS / RHEL** | 8+ | ❌ No Soportado (Script usa apt) |
 
 ---
 
 ## 🚀 Novedades V1.4.3
 
-Esta actualización se centra en la estabilidad, la corrección de errores críticos y mejoras visuales en el monitoreo.
+Esta versión consolida todas las mejoras de estabilidad y visualización.
 
 ### 🛠️ Correcciones Críticas (Core)
-* **Fix LF/CRLF:** Solucionado el error `$'\r': command not found`. Todos los scripts (`.sh`) ahora usan saltos de línea Linux (LF) nativos.
-* **Dependencias:** Añadido `rsync` a la lista de instalación obligatoria para evitar fallos en el actualizador.
-* **Servicio SystemD:** Mejorada la detección automática de la ruta de `node` para evitar que el servicio se detenga en ciertos VPS.
-* **Resolvers de Descarga:** Nueva lógica inteligente para obtener enlaces de descarga de **Forge, Fabric y Paper** sin errores.
+* **Instalación Universal:** Solucionado el error `$'\r': command not found` mediante conversión forzada a formato Linux (LF).
+* **Servicio Robusto:** El panel ahora detecta automáticamente la ruta de instalación de `node` para evitar fallos en VPS con entornos personalizados.
+* **Dependencias:** Añadido `rsync` al instalador para garantizar actualizaciones seguras sin pérdida de datos.
+* **Descargas Inteligentes:** Nuevo sistema para obtener enlaces de descarga de **Forge, Fabric y Paper** sin errores de "Link not found".
 
 ### 🎨 Mejoras Visuales y UI
-* **Gráficas Reales:**
-    * La **RAM** ahora se muestra en **GB** (antes MB) con decimales limpios.
-    * La gráfica de **CPU** ahora tiene escala fija (0-100%) para evitar picos visuales exagerados.
-* **Configuración (server.properties):**
-    * Nuevo diseño alineado con "Cajas" para cada opción.
-    * Detección automática de valores `true/false` convertidos a **Interruptores (Switches)** modernos.
-* **Monitor de Disco:** Implementado cálculo recursivo real (`du`) para mostrar el espacio ocupado exacto.
+* **Gráficas Precisas:**
+    * **RAM:** Visualización en **GB** reales con decimales limpios.
+    * **CPU:** Escala fija (0-100%) para una lectura más natural del rendimiento.
+    * **Disco:** Cálculo recursivo real del espacio ocupado por el servidor.
+* **Editor de Configuración:**
+    * El archivo `server.properties` ahora se muestra con **Interruptores (Switches)** para opciones como `online-mode` (Premium/Crackeado), PvP, Vuelo, etc.
+    * Diseño alineado y limpio para todos los campos de configuración.
 
 ---
 
 ## 📦 Instalación Rápida
 
-Ejecuta este comando en tu terminal (Ubuntu/Debian) como usuario `root`:
+Accede a tu terminal como usuario `root` y ejecuta el siguiente comando mágico:
 
 ```bash
 bash <(curl -s [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh))
 
-El instalador se encargará de:
+El instalador automático se encargará de:
 
     Instalar dependencias (Java, Node.js, Git, Zip, Rsync).
 
-    Configurar el servicio automático systemd.
+    Configurar el servicio automático systemd para que el panel se inicie solo.
 
-    Descargar el núcleo del panel.
+    Descargar el núcleo del panel y los recursos gráficos.
 
     Iniciar el servicio en el puerto 3000.
 
@@ -80,7 +92,7 @@ El instalador se encargará de:
 
     ⚙️ Configuración Visual: Edita server.properties con una interfaz gráfica amigable.
 
-    🔄 Smart Updater: Sistema de actualizaciones OTA (Over-The-Air) integrado.
+    🔄 Smart Updater: Sistema de actualizaciones OTA (Over-The-Air) integrado que protege tus datos.
 
 🛠️ Solución de Problemas Frecuentes
 
@@ -91,10 +103,10 @@ sudo ufw allow 3000/tcp
 
 Si usas Oracle Cloud o AWS, abre también el puerto en el panel de seguridad de tu proveedor.
 
-Error "command not found" al instalar Si descargaste los archivos manualmente en Windows y los subiste, es posible que tengan formato incorrecto. Ejecuta:
+Error "command not found" al instalar Si descargaste los archivos manualmente en Windows y los subiste, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
 Bash
 
-sed -i 's/\r$//' /opt/aetherpanel/installserver.sh
+sed -i 's/\r$//' *.sh
 
 <div align="center">
 
