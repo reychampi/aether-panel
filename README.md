@@ -4,7 +4,7 @@
 
 # 🌌 Aether Panel
 
-**El panel de control ligero, moderno y potente para servidores de Minecraft.**
+**El panel de control ligero, moderno y potente para servidores de Minecraft.**  
 Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 [![Version](https://img.shields.io/badge/version-1.5.2-8b5cf6?style=for-the-badge&logo=git)](https://github.com/reychampi/aether-panel)
@@ -19,7 +19,8 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## ✨ Descripción
 
-**Aether Panel** es una solución todo-en-uno para administrar servidores de Minecraft en entornos Linux. Diseñado para ser visualmente impactante y técnicamente robusto, elimina la necesidad de configuraciones complejas por terminal, ofreciendo una interfaz web reactiva y fácil de usar.
+**Aether Panel** es una solución completa para administrar servidores de Minecraft en Linux.  
+Está diseñado para ser visualmente impactante, técnicamente sólido y extremadamente fácil de usar, eliminando configuraciones manuales innecesarias por terminal.
 
 ![Dashboard Preview](https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png)
 
@@ -27,91 +28,98 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## 🐧 Sistemas Operativos Soportados
 
-Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a su instalador universal inteligente.
+Aether Panel funciona en prácticamente cualquier distro Linux moderna gracias a su instalador universal.
 
 | Familia | Distribuciones Probadas | Gestor | Estado |
-| :--- | :--- | :--- | :--- |
-| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ **Nativo** |
-| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ **Nativo** |
-| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ **Nativo** |
+|--------|---------------------------|--------|--------|
+| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ Nativo |
+| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ Nativo |
+| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ Nativo |
 
 ---
 
 ## 🚀 Novedades V1.5.x
 
-Esta versión introduce mejoras masivas en la Calidad de Vida (QoL) y la experiencia de usuario.
-
 ### 🎮 Experiencia de Usuario (UI/UX)
-* **Consola Interactiva:** Envía comandos al servidor directamente desde la web con una terminal dedicada.
-* **Sistema de Ayuda:** Tooltips `(?)` explicativos en todas las opciones del `server.properties`.
-* **Atajos de Teclado:** Navega rápido usando `Alt + 1-8` y cierra ventanas con `ESC`.
-* **IP Copiable:** Haz clic en la IP de la cabecera para copiarla al portapapeles.
+
+- **Consola Interactiva:** Terminal web con capacidad de enviar comandos al instante.  
+- **Sistema de Ayuda:** Tooltips `(?)` con explicaciones en todas las opciones de `server.properties`.  
+- **Atajos de Teclado:** Usa `Alt + 1-8` para navegar rápidamente.  
+- **IP Copiable:** Clic para copiar la IP del servidor.
 
 ### 🛠️ Mejoras Técnicas
-* **Instalador Universal:** Detección automática de distro (Ubuntu/Fedora/Arch) e instalación de dependencias correspondientes.
-* **Actualizador UI:** Nuevo botón para forzar la actualización de la interfaz gráfica sin reiniciar el servidor.
-* **Soporte de Temas:** Compatibilidad total con Modo Claro y Oscuro en todos los menús.
-* **Resolución de Versiones:** Lógica mejorada para descargar Forge, Fabric y Paper sin errores.
+
+- **Instalador Universal:** Detecta automáticamente tu distro (Ubuntu/Fedora/Arch).  
+- **Actualizador UI:** Botón para refrescar la interfaz sin reiniciar servicios.  
+- **Temas:** Soporte total para Light/Dark Mode.  
+- **Resolución de Versiones:** Descargas de Forge/Fabric/Paper más estables.
 
 ---
 
 ## 📦 Instalación Rápida
 
-Accede a tu terminal como usuario `root` y ejecuta el siguiente comando:
+Ejecuta este comando como `root`:
+
 <pre>
-curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh) | bash
+curl -sL https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh | bash
 </pre>
-El instalador automático se encargará de:
 
-    Detectar tu Sistema Operativo.
+El instalador se encargará de:
 
-    Instalar dependencias necesarias (Java, Node.js, Git, Zip, Rsync).
+- Detectar tu SO  
+- Instalar dependencias (Java, Node.js, Git, Zip, Rsync)  
+- Configurar el servicio systemd  
+- Descargar archivos del panel  
+- Iniciar el servicio en el puerto **3000**
 
-    Configurar el servicio automático systemd.
+---
 
-    Descargar el núcleo del panel y los recursos.
+## ⚡ Características
 
-    Iniciar el servicio en el puerto 3000.
+- 🖥️ **Monitor en Tiempo Real:** CPU, RAM y disco con actualización por sockets.  
+- 💻 **Consola Web:** Terminal en vivo con colores y soporte de comandos.  
+- 📂 **Gestor de Archivos:** Editor integrado con resaltado de sintaxis.  
+- 📥 **Instalador de Núcleos:** Descarga Vanilla, Paper, Fabric y Forge.  
+- 📦 **Sistema de Backups:** Genera y restaura copias en segundos.  
+- 🧩 **Tienda de Mods:** Instalación directa de mods populares.  
+- ⚙️ **Configuración Visual:** Edita opciones de `server.properties` con UI gráfica.  
+- 🔄 **Smart Updater:** Sistema OTA para actualizar el panel.  
 
-⚡ Características
+---
 
-    🖥️ Monitor en Tiempo Real: Gráficas de CPU, RAM y Disco con actualización por Sockets.
+## 🛠️ Solución de Problemas Frecuentes
 
-    💻 Consola Web: Terminal en vivo con colores y envío de comandos.
+### 🔹 El panel no carga en el navegador
 
-    📂 Gestor de Archivos: Editor de texto integrado (Ace Editor) con resaltado de sintaxis.
+Verifica que el puerto **3000** esté abierto:
 
-    📥 Instalador de Núcleos: Descarga Vanilla, Paper, Fabric o Forge con un solo clic.
-
-    📦 Sistema de Backups: Crea y restaura copias de seguridad en segundos.
-
-    🧩 Tienda de Mods: Buscador integrado para instalar mods populares (JEI, JourneyMap, etc.).
-
-    ⚙️ Configuración Visual: Edita server.properties con interruptores y ayudas visuales.
-
-    🔄 Smart Updater: Sistema de actualizaciones OTA (Over-The-Air) integrado.
-
-🛠️ Solución de Problemas Frecuentes
-
-El panel no carga en el navegador Asegúrate de abrir el puerto 3000 en tu firewall:
-
-    Ubuntu/Debian:
+**Ubuntu/Debian**
 <pre>
 sudo ufw allow 3000/tcp
 </pre>
 
-Fedora/CentOS:
+**Fedora/CentOS**
 <pre>
-    sudo firewall-cmd --permanent --add-port=3000/tcp
-    sudo firewall-cmd --reload
+sudo firewall-cmd --permanent --add-port=3000/tcp
+sudo firewall-cmd --reload
 </pre>
-Error "command not found" o "$'\r'" al instalar Si subiste los archivos manualmente desde Windows, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
-Bash
+
+---
+
+### 🔹 Error: `command not found` o `$'\r'`
+
+Esto ocurre si los `.sh` fueron subidos desde Windows (fin de línea CRLF).  
+Ejecuta en la carpeta del panel:
+
 <pre>
 sed -i 's/\r$//' *.sh
 </pre>
+
+---
+
 <div align="center">
 
-Desarrollado por ReyChampi Reportar un Bug
+**Desarrollado por ReyChampi**  
+⭐ Si te gusta el proyecto, ¡dale una estrella en GitHub!
 
 </div>
