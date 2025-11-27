@@ -4,8 +4,8 @@ let currentStoreMode = 'versions';
 
 // --- 1. INFO & INICIO ---
 fetch('/api/info').then(r => r.json()).then(d => {
-    document.getElementById('sidebar-version-text').innerText = 'V1.5.0';
-    document.getElementById('header-version').innerText = 'V1.5.0';
+    document.getElementById('sidebar-version-text').innerText = 'V' + d.version;
+    document.getElementById('header-version').innerText = 'V' + d.version;
 });
 
 // Cargar IP en Header
@@ -21,9 +21,10 @@ function copyIP() {
     navigator.clipboard.writeText(ip).then(() => Toastify({text: '¡IP Copiada!', style:{background:'#10b981'}}).showToast());
 }
 
-// --- 2. SHORTCUTS & NAVEGACIÓN (NUEVO V1.5) ---
+// --- 2. SHORTCUTS & NAVEGACIÓN ---
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeAllModals();
+    // Alt + Número para pestañas
     if (e.altKey && !e.ctrlKey && !e.shiftKey) {
         const map = {'1':'stats','2':'console','3':'files','4':'versions','5':null,'6':'backups','7':'labs','8':'config'};
         if (e.key === '5') openModStore();
@@ -44,7 +45,7 @@ function updateThemeUI(mode) {
 }
 updateThemeUI(localStorage.getItem('theme') || 'dark');
 
-// --- 4. CONSOLA INTERACTIVA (MEJORADA) ---
+// --- 4. CONSOLA INTERACTIVA ---
 const term = new Terminal({ fontFamily: 'JetBrains Mono', theme: { background: '#00000000' }, fontSize: 13, cursorBlink: true });
 const fitAddon = new FitAddon.FitAddon(); term.loadAddon(fitAddon); term.open(document.getElementById('terminal'));
 term.writeln('\x1b[1;35m>>> AETHER PANEL V1.5.0 READY.\x1b[0m\r\n');
@@ -59,7 +60,7 @@ function sendConsoleCommand() {
     if (input && input.value.trim()) { socket.emit('command', input.value); input.value = ''; }
 }
 
-// --- 5. TIENDA DE MODS & BÚSQUEDA (MEJORADA) ---
+// --- 5. TIENDA DE MODS & BÚSQUEDA ---
 const modsDB = [
     { name: "Jei", fullName: "Just Enough Items", url: "https://mediafilez.forgecdn.net/files/5936/206/jei-1.20.1-forge-15.3.0.4.jar", icon: "fa-book", color: "#2ecc71" },
     { name: "Iron Chests", fullName: "Iron Chests", url: "https://mediafilez.forgecdn.net/files/4670/664/ironchest-1.20.1-14.4.4.jar", icon: "fa-box", color: "#95a5a6" },
@@ -203,8 +204,24 @@ function createBackup(){ api('backups/create').then(()=>setTimeout(loadBackups,2
 function deleteBackup(n){ if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups) }
 function restoreBackup(n){ if(confirm('¿Restaurar?'))api('backups/restore',{name:n}) }
 
-// --- CONFIG (Tooltips) ---
-const propDesc = { 'online-mode': 'ACTIVADO: Solo Premium.\nDESACTIVADO: Permite No-Premium (Crackeado).', 'white-list': 'Solo jugadores en lista blanca pueden entrar.', 'pvp': 'Daño entre jugadores activado.', 'allow-flight': 'Permite volar en survival (anti-kick).', 'view-distance': 'Distancia de renderizado (chunks). Menos = Menos Lag.', 'max-players': 'Máximo de jugadores.', 'level-seed': 'Semilla del mundo.', 'motd': 'Mensaje en la lista de servidores.', 'difficulty': 'peaceful, easy, normal, hard.', 'gamemode': 'survival, creative, adventure, spectator.' };
+// --- CONFIGURATION TOOLTIPS ---
+const propDesc = {
+    'online-mode': 'ACTIVADO: Solo cuentas Premium.\nDESACTIVADO: Permite No-Premium (Crackeado).',
+    'motd': 'Mensaje debajo del nombre del servidor.',
+    'max-players': 'Límite de jugadores.',
+    'server-port': 'Puerto del servidor (25565).',
+    'white-list': 'Solo usuarios en lista blanca pueden entrar.',
+    'pvp': 'Daño entre jugadores.',
+    'allow-flight': 'Permite volar en survival (anti-kick).',
+    'view-distance': 'Distancia de renderizado (chunks).',
+    'difficulty': 'peaceful, easy, normal, hard.',
+    'gamemode': 'survival, creative, adventure, spectator.',
+    'level-seed': 'Semilla del mundo.',
+    'spawn-protection': 'Radio protegido en el spawn.',
+    'hardcore': 'Ban al morir.',
+    'enable-command-block': 'Permitir bloques de comandos.'
+};
+
 function loadCfg() { 
     fetch('/api/config').then(r => r.json()).then(d => { 
         const c = document.getElementById('cfg-list'); c.innerHTML = ''; 
@@ -222,9 +239,39 @@ function loadCfg() {
         } 
     }).catch(e => console.error(e));
 }
+
 function saveCfg() { 
     const d = {}; 
     document.querySelectorAll('.cfg-in').forEach(i => d[i.dataset.k] = i.value); 
     document.querySelectorAll('.cfg-bool').forEach(i => d[i.dataset.k] = i.checked ? 'true' : 'false');
     api('config', d); Toastify({text:'Configuración Guardada', style:{background:'#10b981'}}).showToast(); 
+}
+
+// --- UPDATER ---
+checkUpdate(true);
+function checkUpdate(isAuto = false) {
+    if (!isAuto) Toastify({ text: 'Buscando actualizaciones...', style: { background: 'var(--p)' } }).showToast();
+    fetch('/api/update/check').then(r => r.json()).then(d => {
+        if (d.type !== 'none') showUpdateModal(d);
+        else if (!isAuto) Toastify({ text: 'Sistema actualizado', style: { background: '#10b981' } }).showToast();
+    }).catch(e => { if (!isAuto) Toastify({ text: 'Error GitHub', style: { background: '#ef4444' } }).showToast(); });
+}
+function showUpdateModal(d) {
+    const m = document.getElementById('update-modal');
+    const t = document.getElementById('update-text');
+    const a = document.getElementById('up-actions');
+    const ti = document.getElementById('up-title');
+    if (d.type === 'hard') {
+        ti.innerText = "Actualización Mayor";
+        t.innerText = `Versión local: ${d.local}\nNueva versión: ${d.remote}\n\nSe requiere reinicio.`;
+        a.innerHTML = `<button onclick="doUpdate('hard')" class="btn btn-primary">ACTUALIZAR</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
+        m.style.display = 'flex';
+    }
+}
+function doUpdate(type) {
+    document.getElementById('update-modal').style.display = 'none';
+    fetch('/api/update/perform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) }).then(r => r.json()).then(d => {
+        if (d.mode === 'soft') { Toastify({ text: 'Aplicado.', style: { background: '#10b981' } }).showToast(); setTimeout(() => location.reload(), 1500); }
+        if (d.mode === 'hard') { Toastify({ text: 'Reiniciando...', style: { background: '#f59e0b' } }).showToast(); setTimeout(() => location.reload(), 8000); }
+    });
 }
