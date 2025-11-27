@@ -341,3 +341,29 @@ function doUpdate(type) {
         if (d.mode === 'hard') { Toastify({ text: 'Reiniciando...', style: { background: '#f59e0b' } }).showToast(); setTimeout(() => location.reload(), 8000); }
     });
 }
+// --- FUNCIÓN PARA FORZAR ACTUALIZACIÓN UI ---
+function forceUIUpdate() {
+    if(!confirm('¿Quieres forzar la recarga de la interfaz gráfica?\nSe descargarán los últimos HTML, CSS y JS desde GitHub.')) return;
+
+    Toastify({text: 'Descargando interfaz...', style:{background:'#8b5cf6'}}).showToast();
+    
+    // Llamamos al endpoint con type: 'soft' para forzar la bajada de assets
+    fetch('/api/update/perform', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ type: 'soft' }) 
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) { 
+            Toastify({ text: '¡Interfaz actualizada! Recargando...', style: { background: '#10b981' } }).showToast(); 
+            setTimeout(() => location.reload(), 1500); 
+        } else {
+            throw new Error(d.error || 'Error desconocido');
+        }
+    })
+    .catch(e => {
+        console.error(e);
+        Toastify({ text: 'Error al actualizar UI', style: { background: '#ef4444' } }).showToast(); 
+    });
+}
