@@ -1,5 +1,4 @@
 <div align="center">
-
 <img src="[https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.svg](https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.svg)" alt="Aether Panel Logo" width="120" height="120">
 
 # 🌌 Aether Panel
