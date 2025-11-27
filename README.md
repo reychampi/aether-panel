@@ -1,3 +1,8 @@
+Aquí tienes el código completo y definitivo para tu archivo **`README.md`**.
+
+He consolidado todos los cambios recientes (Instalador Universal, Versión 1.5.2, Soporte Multi-Distro y Nuevas Funcionalidades) en un único bloque de código listo para copiar.
+
+````markdown
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png" alt="Aether Panel Logo" width="120" height="120">
@@ -27,7 +32,7 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## 🐧 Sistemas Operativos Soportados
 
-Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a su instalador universal.
+Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a su instalador universal inteligente.
 
 | Familia | Distribuciones Probadas | Gestor | Estado |
 | :--- | :--- | :--- | :--- |
@@ -39,14 +44,19 @@ Aether Panel funciona en la mayoría de distribuciones Linux modernas gracias a 
 
 ## 🚀 Novedades V1.5.x
 
-Esta versión introduce mejoras masivas en la Calidad de Vida (QoL).
+Esta versión introduce mejoras masivas en la Calidad de Vida (QoL) y la experiencia de usuario.
 
-* **🎮 Consola Interactiva:** Envía comandos directamente desde la web.
-* **💡 Sistema de Ayuda:** Tooltips `(?)` explicativos en toda la configuración.
-* **⌨️ Atajos de Teclado:** Usa `Alt + 1-8` para navegar y `ESC` para cerrar.
-* **🌐 IP Copiable:** Haz clic en la IP de la cabecera para copiarla.
-* **🎨 Temas:** Soporte total para Modo Claro y Oscuro en todos los menús.
-* **🛠️ Instalador Universal:** Soporte automático para Fedora, Arch y CentOS.
+### 🎮 Experiencia de Usuario (UI/UX)
+* **Consola Interactiva:** Envía comandos al servidor directamente desde la web con una terminal dedicada.
+* **Sistema de Ayuda:** Tooltips `(?)` explicativos en todas las opciones del `server.properties`.
+* **Atajos de Teclado:** Navega rápido usando `Alt + 1-8` y cierra ventanas con `ESC`.
+* **IP Copiable:** Haz clic en la IP de la cabecera para copiarla al portapapeles.
+
+### 🛠️ Mejoras Técnicas
+* **Instalador Universal:** Detección automática de distro (Ubuntu/Fedora/Arch) e instalación de dependencias correspondientes.
+* **Actualizador UI:** Nuevo botón para forzar la actualización de la interfaz gráfica sin reiniciar el servidor.
+* **Soporte de Temas:** Compatibilidad total con Modo Claro y Oscuro en todos los menús.
+* **Resolución de Versiones:** Lógica mejorada para descargar Forge, Fabric y Paper sin errores.
 
 ---
 
@@ -55,54 +65,59 @@ Esta versión introduce mejoras masivas en la Calidad de Vida (QoL).
 Accede a tu terminal como usuario `root` y ejecuta el siguiente comando:
 
 ```bash
-curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh) | bash```
+curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh) | bash
+````
 
 El instalador automático se encargará de:
 
-    Detectar tu Sistema Operativo.
+1.  **Detectar tu Sistema Operativo.**
+2.  Instalar dependencias necesarias (Java, Node.js, Git, Zip, Rsync).
+3.  Configurar el servicio automático `systemd`.
+4.  Descargar el núcleo del panel y los recursos.
+5.  Iniciar el servicio en el puerto **3000**.
 
-    Instalar dependencias (Java, Node.js, Git, Zip, Rsync).
+-----
 
-    Configurar el servicio automático systemd.
+## ⚡ Características
 
-    Iniciar el panel en el puerto 3000.
+  * **🖥️ Monitor en Tiempo Real:** Gráficas de CPU, RAM y Disco con actualización por Sockets.
+  * **💻 Consola Web:** Terminal en vivo con colores y envío de comandos.
+  * **📂 Gestor de Archivos:** Editor de texto integrado (Ace Editor) con resaltado de sintaxis.
+  * **📥 Instalador de Núcleos:** Descarga Vanilla, Paper, Fabric o Forge con un solo clic.
+  * **📦 Sistema de Backups:** Crea y restaura copias de seguridad en segundos.
+  * **🧩 Tienda de Mods:** Buscador integrado para instalar mods populares (JEI, JourneyMap, etc.).
+  * **⚙️ Configuración Visual:** Edita `server.properties` con interruptores y ayudas visuales.
+  * **🔄 Smart Updater:** Sistema de actualizaciones OTA (Over-The-Air) integrado.
 
-⚡ Características
+-----
 
-    🖥️ Monitor en Tiempo Real: Gráficas de CPU, RAM y Disco en tiempo real.
+## 🛠️ Solución de Problemas Frecuentes
 
-    💻 Consola Web: Terminal en vivo con colores y envío de comandos.
+**El panel no carga en el navegador**
+Asegúrate de abrir el puerto 3000 en tu firewall:
 
-    📂 Gestor de Archivos: Editor de texto integrado con resaltado de sintaxis.
+  * **Ubuntu/Debian:**
+    ```bash
+    sudo ufw allow 3000/tcp
+    ```
+  * **Fedora/CentOS:**
+    ```bash
+    sudo firewall-cmd --permanent --add-port=3000/tcp
+    sudo firewall-cmd --reload
+    ```
 
-    📥 Instalador de Núcleos: Vanilla, Paper, Fabric y Forge a un clic.
+**Error "command not found" o "$'\\r'" al instalar**
+Si subiste los archivos manualmente desde Windows, es posible que tengan formato incorrecto. Ejecuta en la carpeta del panel:
 
-    📦 Backups: Crea y restaura copias de seguridad al instante.
+```bash
+sed -i 's/\r$//' *.sh
+```
 
-    🧩 Tienda de Mods: Buscador integrado para instalar mods populares.
+-----
 
-    ⚙️ Configuración Visual: Edita server.properties con interruptores fáciles.
+\<div align="center"\>
 
-    🔄 Smart Updater: Sistema de actualizaciones OTA integrado.
+**Desarrollado con ❤️ por ReyChampi**
+[Reportar un Bug](https://www.google.com/search?q=https://github.com/reychampi/aether-panel/issues)
 
-🛠️ Solución de Problemas
-
-El panel no carga en el navegador Asegúrate de abrir el puerto 3000 en tu firewall:
-Bash
-
-# Ubuntu/Debian
-sudo ufw allow 3000/tcp
-
-# Fedora/CentOS
-sudo firewall-cmd --permanent --add-port=3000/tcp && sudo firewall-cmd --reload
-
-Error "command not found" o "$'\r'" Si subiste los archivos desde Windows manualmente, ejecuta esto para corregir el formato:
-Bash
-
-sed -i 's/\r$//' /opt/aetherpanel/*.sh
-
-<div align="center">
-
-Desarrollado con ❤️ por ReyChampi Reportar un Bug
-
-</div>
+\</div\>
