@@ -33,7 +33,6 @@ const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.5.4' }
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
 const GH_API_URL = 'https://api.github.com/repos/reychampi/aether-panel/contents/package.json?ref=main';
 
-// --- UTILS ---
 const getDirSize = (dirPath) => {
     let size = 0;
     try {
@@ -42,7 +41,8 @@ const getDirSize = (dirPath) => {
             files.forEach(file => {
                 const filePath = path.join(dirPath, file);
                 const stats = fs.statSync(filePath);
-                if (stats.isDirectory()) size += getDirSize(filePath); else size += stats.size;
+                if (stats.isDirectory()) size += getDirSize(filePath);
+                else size += stats.size;
             });
         }
     } catch(e) {}
@@ -59,7 +59,7 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// --- ROUTES ---
+// --- RUTAS ---
 app.get('/api/network', (req, res) => {
     let port = 25565; let customDomain = null;
     try {
@@ -80,7 +80,6 @@ app.get('/api/info', (req, res) => {
     catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- UPDATES (Anti-Cache) ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -115,9 +114,10 @@ app.post('/api/update/perform', async (req, res) => {
             updater.unref();
         } else {
             io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema...' });
+            // En Linux usamos bash directo sobre el script
             const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
             updater.unref();
-            setTimeout(() => process.exit(0), 1000);
+            // NO SALIMOS DEL PROCESO (process.exit) AQUÍ. Dejamos que el script reinicie el servicio.
         }
         res.json({ success: true, mode: 'hard' });
     } else if (type === 'soft') {
@@ -177,7 +177,6 @@ app.post('/api/nebula/resolve-forge', async (req, res) => {
         res.json({ url: `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}-${forgeBuild}/forge-${version}-${forgeBuild}-installer.jar` });
     } catch (e) { res.status(500).json({ error: 'Forge Resolve Failed' }); }
 });
-
 app.post('/api/install', async (req, res) => { try { await mcServer.installJar(req.body.url, req.body.filename); res.json({ success: true }); } catch (e) { res.status(500).json({}); } });
 app.post('/api/mods/install', async (req, res) => {
     const { url, name } = req.body;
@@ -240,4 +239,4 @@ app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); ex
 
 io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
 
-server.listen(3000, () => console.log('Aether Panel V1.5.4 running on port 3000'));
+server.listen(3000, () => console.log('Aether Panel V1.5.4 (Live Updater) running on port 3000'));
