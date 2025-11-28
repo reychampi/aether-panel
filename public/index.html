@@ -105,7 +105,7 @@
             <div class="brand">
                 <div class="brand-logo"><img src="/logo.svg" alt="Logo" style="width:24px;height:24px"></div>
                 <div class="brand-text">
-                    <span class="version-badge" id="sidebar-version-text">V1.5.1</span>
+                    <span class="version-badge" id="sidebar-version-text">V1.5.4</span>
                     <span class="brand-name">AETHER</span>
                 </div>
             </div>
@@ -141,7 +141,7 @@
                     <div style="display:flex; align-items:center; gap:15px;">
                         <h1>Aether Panel</h1>
                         <div class="badges">
-                            <span class="badge badge-primary" id="header-version">V1.5.1</span>
+                            <span class="badge badge-primary" id="header-version">V1.5.4</span>
                             <span class="badge badge-success">Stable</span>
                         </div>
                     </div>
@@ -173,8 +173,17 @@
                         <div class="stat-detail"><span>Libre:</span> <span id="ram-free">0 MB</span></div>
                     </div>
                     <div class="card glass">
-                        <div class="card-header"><h3><i class="fa-solid fa-hard-drive"></i> Disco</h3><span class="stat-value" id="disk-val">...</span></div>
-                        <div class="disk-bar"><div class="disk-fill" id="disk-fill"></div></div>
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-hard-drive"></i> Disco</h3>
+                            <span class="stat-value" id="disk-val">...</span>
+                        </div>
+                        <div class="disk-bar" style="margin-bottom: 15px;">
+                            <div class="disk-fill" id="disk-fill"></div>
+                        </div>
+                        <div class="stat-detail" style="border-top: 1px solid var(--border); padding-top: 10px;">
+                            <span style="color:var(--muted)"><i class="fa-solid fa-network-wired"></i> IP Local:</span>
+                            <span id="card-ip-display" style="color:var(--p); font-family:'JetBrains Mono'">...</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -246,48 +255,33 @@
                 <p style="color:var(--muted);margin-bottom:20px">Funciones en desarrollo. Úsalas con precaución.</p>
                 
                 <div class="labs-grid">
-                    
-                    <div class="card glass lab-card-dns">
-                        <div class="card-header" style="margin-bottom: 10px;">
-                            <h3><i class="fa-solid fa-globe"></i> Dominio Local (DNS)</h3>
-                        </div>
-                        <p class="lab-desc">Define un nombre de dominio (ej: mc.local) para acceder al panel y al servidor, ignorando los cambios de IP de Adaptador Puente. <strong>Requiere configurar el archivo Hosts.</strong></p>
-                        <div class="cfg-item" style="margin-top: 16px; margin-bottom: 0;">
-                            <label class="cfg-label">Dominio Preferido</label>
-                            <input type="text" id="cfg-custom-domain" class="cfg-in" placeholder="ej: panel.local">
-                        </div>
-                        <button onclick="saveCfg()" class="btn btn-primary" style="width: 100%; margin-top: 16px;">
-                            <i class="fa-solid fa-floppy-disk"></i> Guardar
-                        </button>
-                    </div>
-                    
-                    <div class="card glass lab-card">
-                        <div class="card-header" style="margin-bottom: 10px;">
+                    <div class="card glass">
+                        <div class="card-header">
                             <h3><i class="fa-solid fa-bolt"></i> Turbo Mode</h3>
                             <label class="switch"><input type="checkbox" id="lab-turbo"><span class="slider round"></span></label>
                         </div>
-                        <p class="lab-desc">Prioriza el proceso de Java para mejorar el rendimiento del servidor.</p>
+                        <p class="lab-desc">Prioriza el proceso de Java para mejorar el rendimiento.</p>
                     </div>
 
-                    <div class="card glass lab-card">
-                        <div class="card-header" style="margin-bottom: 10px;">
+                    <div class="card glass">
+                        <div class="card-header">
                             <h3><i class="fa-solid fa-folder-tree"></i> Gestor de Archivos</h3>
-                            <span class="badge badge-warning" style="font-size:0.7rem">BETA</span>
+                            <span class="badge badge-warning" style="font-size:0.6rem">BETA</span>
                         </div>
                         <p class="lab-desc">Explorador de archivos avanzado. Permite editar configs manualmente.</p>
-                        <button class="btn btn-primary" style="width:100%;margin-top:auto;" onclick="setTab('files')">
-                            <i class="fa-solid fa-folder-open"></i> Abrir Gestor
+                        <button class="btn btn-primary" style="width:100%;margin-top:10px;" onclick="setTab('files')">
+                            Abrir Gestor
                         </button>
                     </div>
 
-                    <div class="card glass lab-card">
-                        <div class="card-header" style="margin-bottom: 10px;">
+                    <div class="card glass">
+                        <div class="card-header">
                             <h3><i class="fa-solid fa-puzzle-piece"></i> Tienda de Mods</h3>
-                            <span class="badge badge-danger" style="font-size:0.7rem">ALPHA</span>
+                            <span class="badge badge-danger" style="font-size:0.6rem">ALPHA</span>
                         </div>
                         <p class="lab-desc">Instalador automático de mods populares. Puede contener errores.</p>
-                        <button class="btn btn-primary" style="width:100%;margin-top:auto;" onclick="openModStore()">
-                            <i class="fa-solid fa-store"></i> Abrir Tienda
+                        <button class="btn btn-primary" style="width:100%;margin-top:10px;" onclick="openModStore()">
+                            Abrir Tienda
                         </button>
                     </div>
                 </div>
@@ -300,18 +294,26 @@
                         <button onclick="saveCfg()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
                     </div>
 
-                    <h4 style="margin-bottom:15px;color:var(--p-light)">Personalización</h4>
+                    <h4 style="margin-bottom:15px;color:var(--p-light)">Personalización y Red</h4>
                     <div class="cfg-grid">
+                        
                         <div class="cfg-item">
                             <label class="cfg-label">Nombre del Servidor</label>
                             <input type="text" id="cfg-name" class="cfg-in" placeholder="Aether Panel">
                         </div>
+
+                        <div class="cfg-item">
+                            <label class="cfg-label">Dominio Local (DNS)</label>
+                            <input type="text" id="cfg-custom-domain" class="cfg-in" placeholder="ej: panel.local">
+                        </div>
+
                         <div class="cfg-item">
                             <label class="cfg-label">Color del Tema</label>
                             <div class="cfg-color-wrapper">
                                 <input type="color" id="cfg-color" class="cfg-color" value="#8b5cf6">
                             </div>
                         </div>
+
                         <div class="cfg-item">
                             <label class="cfg-label">Partículas</label>
                             <div class="cfg-switch-wrapper">
