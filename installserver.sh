@@ -35,7 +35,6 @@ case $OS in
         apt-get update -qq
         apt-get install -y -qq curl wget unzip git rsync default-jre
         
-        # Node.js
         if ! command -v node &> /dev/null; then
             echo "📦 Instalando Node.js..."
             curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
@@ -47,7 +46,6 @@ case $OS in
         echo "📦 Instalando dependencias para RHEL/Fedora..."
         dnf install -y curl wget unzip git rsync java-latest-openjdk
         
-        # Node.js
         if ! command -v node &> /dev/null; then
             echo "📦 Instalando Node.js..."
             dnf install -y nodejs
@@ -60,22 +58,19 @@ case $OS in
         ;;
 
     *)
-        echo "⚠️  Tu distribución ($OS) no está soportada oficialmente por el instalador automático."
+        echo "⚠️  Tu distribución ($OS) no está soportada oficialmente."
         echo "    Instala manualmente: nodejs, java, git, unzip, curl, wget, rsync."
-        read -p "    ¿Deseas continuar de todas formas? (y/n) " -n 1 -r
+        read -p "    ¿Continuar? (y/n) " -n 1 -r
         echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then exit 1; fi
         ;;
 esac
 
 # 4. PREPARACIÓN DE DIRECTORIO
-echo "📂 Configurando directorios..."
 mkdir -p "$APP_DIR/public"
 chown -R $SERVICE_USER:$SERVICE_USER "$APP_DIR"
 
-# 5. DESCARGA DE ASSETS (LOGOS)
+# 5. DESCARGA DE ASSETS
 echo "🎨 Descargando recursos gráficos..."
 curl -s -L "https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.svg" -o "$APP_DIR/public/logo.svg"
 curl -s -L "https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.ico" -o "$APP_DIR/public/logo.ico"
@@ -86,11 +81,9 @@ curl -H 'Cache-Control: no-cache' -s "$UPDATER_URL" -o "$APP_DIR/updater.sh"
 chmod +x "$APP_DIR/updater.sh"
 chown $SERVICE_USER:$SERVICE_USER "$APP_DIR/updater.sh"
 
-# 7. CREACIÓN DEL SERVICIO SYSTEMD (UNIVERSAL)
-# Detectamos la ruta real de Node porque cambia entre distros (ej: /usr/bin/node vs /usr/local/bin/node)
+# 7. CREACIÓN DEL SERVICIO SYSTEMD
 NODE_PATH=$(which node)
-
-echo "⚙️ Configurando servicio del sistema (Node en $NODE_PATH)..."
+echo "⚙️ Configurando servicio (Node en $NODE_PATH)..."
 cat > /etc/systemd/system/aetherpanel.service <<EOF
 [Unit]
 Description=Aether Panel Service
@@ -111,7 +104,7 @@ EOF
 systemctl daemon-reload
 systemctl enable aetherpanel
 
-# 8. EJECUTAR EL UPDATER PARA LA PRIMERA INSTALACIÓN
+# 8. EJECUTAR INSTALACIÓN INICIAL
 echo "🚀 Ejecutando instalación del núcleo..."
 if [ "$SERVICE_USER" == "root" ]; then
     bash "$APP_DIR/updater.sh"
