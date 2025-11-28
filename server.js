@@ -12,6 +12,7 @@ const { exec, spawn } = require('child_process');
 const stream = require('stream');
 const { promisify } = require('util');
 
+// --- INICIALIZACIÓN ---
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -22,17 +23,23 @@ const IS_WIN = process.platform === 'win32';
 const SERVER_DIR = path.join(__dirname, 'servers', 'default');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
+// Asegurar directorios
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
+// --- MIDDLEWARE ---
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// --- GESTOR MINECRAFT ---
 const mcServer = new MCManager(io);
+
+// --- CLIENTE API ---
 const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.5.4' }, timeout: 10000 });
 const REPO_RAW = 'https://raw.githubusercontent.com/reychampi/aether-panel/main';
 const GH_API_URL = 'https://api.github.com/repos/reychampi/aether-panel/contents/package.json?ref=main';
 
+// --- UTILIDADES ---
 const getDirSize = (dirPath) => {
     let size = 0;
     try {
@@ -59,7 +66,10 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// --- RUTAS ---
+// ==========================================
+//                 RUTAS API
+// ==========================================
+
 app.get('/api/network', (req, res) => {
     let port = 25565; let customDomain = null;
     try {
@@ -80,6 +90,7 @@ app.get('/api/info', (req, res) => {
     catch (e) { res.json({ version: 'Unknown' }); }
 });
 
+// --- ACTUALIZADOR ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -114,10 +125,9 @@ app.post('/api/update/perform', async (req, res) => {
             updater.unref();
         } else {
             io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema...' });
-            // En Linux usamos bash directo sobre el script
             const updater = spawn('bash', ['/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
             updater.unref();
-            // NO SALIMOS DEL PROCESO (process.exit) AQUÍ. Dejamos que el script reinicie el servicio.
+            setTimeout(() => process.exit(0), 1000);
         }
         res.json({ success: true, mode: 'hard' });
     } else if (type === 'soft') {
@@ -153,6 +163,7 @@ app.get('/api/settings', (req, res) => {
     try { if(fs.existsSync(path.join(__dirname, 'settings.json'))) res.json(JSON.parse(fs.readFileSync(path.join(__dirname, 'settings.json'), 'utf8'))); else res.json({ ram: '4G' }); } catch(e) { res.json({ ram: '4G' }); }
 });
 
+// --- VERSIONES MINECRAFT ---
 app.post('/api/nebula/versions', async (req, res) => {
     try {
         const t = req.body.type; let l = [];
@@ -177,6 +188,7 @@ app.post('/api/nebula/resolve-forge', async (req, res) => {
         res.json({ url: `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}-${forgeBuild}/forge-${version}-${forgeBuild}-installer.jar` });
     } catch (e) { res.status(500).json({ error: 'Forge Resolve Failed' }); }
 });
+
 app.post('/api/install', async (req, res) => { try { await mcServer.installJar(req.body.url, req.body.filename); res.json({ success: true }); } catch (e) { res.status(500).json({}); } });
 app.post('/api/mods/install', async (req, res) => {
     const { url, name } = req.body;
@@ -239,4 +251,4 @@ app.post('/api/backups/restore', async (req, res) => { await mcServer.stop(); ex
 
 io.on('connection', (s) => { s.emit('logs_history', mcServer.getRecentLogs()); s.emit('status_change', mcServer.status); s.on('command', (c) => mcServer.sendCommand(c)); });
 
-server.listen(3000, () => console.log('Aether Panel V1.5.4 (Live Updater) running on port 3000'));
+server.listen(3000, () => console.log('Aether Panel V1.5.4 running on port 3000'));
