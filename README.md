@@ -43,7 +43,7 @@ Aether Panel es ahora **Universal** y funciona nativamente en la mayoría de sis
 
 ---
 
-## 🚀 Novedades V1.5.x
+## 🚀 Novedades V1.6.x
 
 ### 🎮 Experiencia de Usuario (UI/UX)
 
