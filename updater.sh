@@ -1,42 +1,50 @@
 #!/bin/bash
 
 # ============================================================
-# AETHER PANEL - LIVE UPDATER (CURL MODE)
-# Descarga y sobrescribe en caliente. Reinicia al final.
+# AETHER PANEL - DIRECT UPDATER (Live Mode)
+# Estrategia: Descargar -> Descomprimir -> Sobrescribir -> Reiniciar
 # ============================================================
 
 LOG="/opt/aetherpanel/update.log"
 APP_DIR="/opt/aetherpanel"
 REPO_ZIP="https://github.com/reychampi/aether-panel/archive/refs/heads/main.zip"
 
-# Función de log simple
+# Función para registrar logs
 log() { echo "[$(date +'%T')] $1" >> $LOG; }
 
-log "--- INICIANDO ACTUALIZACIÓN ---"
+log "--- ⚡ ACTUALIZACIÓN DIRECTA INICIADA ---"
 
-# 1. IR AL DIRECTORIO
-cd "$APP_DIR" || exit 1
+# 1. Ir al directorio del panel
+cd "$APP_DIR" || { log "❌ Error: No encuentro el directorio"; exit 1; }
 
-# 2. DESCARGAR Y EXTRAER (Usando CURL como pediste)
+# 2. Limpieza previa de temporales antiguos
+rm -rf update.zip aether-panel-main
+
+# 3. Descargar la última versión
 log "⬇️ Descargando código..."
 curl -sL "$REPO_ZIP" -o update.zip
+
+# 4. Descomprimir
+log "📦 Descomprimiendo..."
 unzip -q -o update.zip
 
-# 3. INSTALAR SOBRE LA MARCHA
-# Movemos los archivos de la carpeta extraída a la raíz, forzando sobrescritura
-log "♻️ Aplicando archivos..."
+# 5. Aplicar actualización (Sobrescribir archivos)
+log "♻️ Aplicando cambios..."
+# Copiamos el contenido de la carpeta descomprimida a la raíz
 cp -rf aether-panel-main/* .
+
+# 6. Limpieza post-instalación
 rm -rf aether-panel-main update.zip
 
-# 4. ASEGURAR PERMISOS
+# 7. Asegurar permisos de ejecución
 chmod +x updater.sh installserver.sh
 
-# 5. ACTUALIZAR DEPENDENCIAS (Silencioso)
-log "📦 Actualizando librerías..."
+# 8. Actualizar dependencias (por si cambiaron)
+log "📚 Actualizando librerías..."
 npm install --production > /dev/null 2>&1
 
-# 6. REINICIO FINAL
-# Solo aquí reiniciamos. Como es el último paso, si el script muere, ya ha terminado.
+# 9. Reiniciar el servicio para aplicar cambios
+# Este paso es el final. Al reiniciar, el panel nuevo tomará el control.
 log "🚀 Reiniciando servicio..."
 systemctl restart aetherpanel
 
