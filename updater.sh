@@ -1,79 +1,43 @@
 #!/bin/bash
 
 # ============================================================
-# AETHER PANEL - ATOMIC UPDATER
-# Método: Sobrescribir todo excepto datos de usuario.
+# AETHER PANEL - LIVE UPDATER (CURL MODE)
+# Descarga y sobrescribe en caliente. Reinicia al final.
 # ============================================================
 
 LOG="/opt/aetherpanel/update.log"
 APP_DIR="/opt/aetherpanel"
-TEMP_DIR="/tmp/aether_update_temp"
 REPO_ZIP="https://github.com/reychampi/aether-panel/archive/refs/heads/main.zip"
 
-log_msg() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG
-    echo -e "$1"
-}
+# Función de log simple
+log() { echo "[$(date +'%T')] $1" >> $LOG; }
 
-log_msg "--- ⚡ INICIANDO ACTUALIZACIÓN FORZADA ---"
+log "--- INICIANDO ACTUALIZACIÓN ---"
 
-# 1. DESCARGA EN LIMPIO
-rm -rf "$TEMP_DIR"
-mkdir -p "$TEMP_DIR"
+# 1. IR AL DIRECTORIO
+cd "$APP_DIR" || exit 1
 
-log_msg "⬇️  Descargando código..."
-wget -q "$REPO_ZIP" -O /tmp/update.zip || curl -L "$REPO_ZIP" -o /tmp/update.zip
-unzip -q -o /tmp/update.zip -d "$TEMP_DIR"
+# 2. DESCARGAR Y EXTRAER (Usando CURL como pediste)
+log "⬇️ Descargando código..."
+curl -sL "$REPO_ZIP" -o update.zip
+unzip -q -o update.zip
 
-NEW_SOURCE=$(find "$TEMP_DIR" -name "package.json" | head -n 1 | xargs dirname)
+# 3. INSTALAR SOBRE LA MARCHA
+# Movemos los archivos de la carpeta extraída a la raíz, forzando sobrescritura
+log "♻️ Aplicando archivos..."
+cp -rf aether-panel-main/* .
+rm -rf aether-panel-main update.zip
 
-if [ -z "$NEW_SOURCE" ]; then
-    log_msg "❌ ERROR: Descarga fallida."
-    exit 1
-fi
+# 4. ASEGURAR PERMISOS
+chmod +x updater.sh installserver.sh
 
-# 2. PARADA DE SEGURIDAD
-log_msg "🛑 Deteniendo servicio..."
-systemctl stop aetherpanel
+# 5. ACTUALIZAR DEPENDENCIAS (Silencioso)
+log "📦 Actualizando librerías..."
+npm install --production > /dev/null 2>&1
 
-# 3. SOBRESCRITURA MASIVA (Salvo configs)
-log_msg "♻️  Reemplazando archivos del sistema..."
+# 6. REINICIO FINAL
+# Solo aquí reiniciamos. Como es el último paso, si el script muere, ya ha terminado.
+log "🚀 Reiniciando servicio..."
+systemctl restart aetherpanel
 
-# Usamos rsync para forzar el estado exacto del repo, pero protegiendo tus datos
-# --delete: Borra archivos basura que ya no existan en el repo
-rsync -a --delete \
-    --exclude='settings.json' \
-    --exclude='servers/' \
-    --exclude='backups/' \
-    --exclude='node_modules/' \
-    --exclude='update.log' \
-    --exclude='eula.txt' \
-    --exclude='server.properties' \
-    --exclude='updater.sh' \
-    --exclude='installserver.sh' \
-    "$NEW_SOURCE/" "$APP_DIR/" >> $LOG 2>&1
-
-# 4. REPARACIÓN DE PERMISOS Y DEPENDENCIAS
-log_msg "🔧 Ajustando permisos y dependencias..."
-cd "$APP_DIR"
-# Forzamos reinstalación de dependencias por si el package.json cambió
-npm install --production >> $LOG 2>&1
-
-# Asegurar ejecutables
-chmod +x "$APP_DIR/updater.sh"
-chmod +x "$APP_DIR/installserver.sh"
-
-# 5. ARRANQUE
-log_msg "🚀 Iniciando Aether Panel..."
-systemctl start aetherpanel
-
-# Verificación final
-sleep 5
-if systemctl is-active --quiet aetherpanel; then
-    log_msg "✅ ACTUALIZACIÓN COMPLETADA EXITOSAMENTE."
-else
-    log_msg "🚨 ERROR: El panel no arrancó. Revisa 'sudo journalctl -u aetherpanel -n 50'"
-fi
-
-# Limpieza
-rm -rf "$TEMP_DIR" /tmp/update.zip
+log "✅ ACTUALIZACIÓN COMPLETADA"
