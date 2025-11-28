@@ -9,14 +9,27 @@ fetch('/api/info').then(r => r.json()).then(d => {
     if(hb) hb.innerText = 'V' + d.version;
 });
 
+// --- RED (IP EN HEADER Y EN CARD) ---
 fetch('/api/network').then(r => r.json()).then(d => {
+    // 1. En la Cabecera (Copiable)
     const ipElem = document.getElementById('server-ip-display');
     if(ipElem) {
         const val = d.custom_domain ? `${d.custom_domain}:${d.port}` : `${d.ip}:${d.port}`;
-        ipElem.innerText = val; ipElem.dataset.fullIp = val;
+        ipElem.innerText = val; 
+        ipElem.dataset.fullIp = val;
+    }
+    
+    // 2. En la Tarjeta de Disco (Información)
+    const cardIp = document.getElementById('card-ip-display');
+    if(cardIp) {
+        cardIp.innerText = d.ip; // Solo muestra la IP numérica
     }
 });
-function copyIP() { navigator.clipboard.writeText(document.getElementById('server-ip-display').dataset.fullIp).then(() => Toastify({text: '¡IP Copiada!', style:{background:'#10b981'}}).showToast()); }
+
+function copyIP() { 
+    const ip = document.getElementById('server-ip-display').dataset.fullIp;
+    navigator.clipboard.writeText(ip).then(() => Toastify({text: '¡IP Copiada!', style:{background:'#10b981'}}).showToast()); 
+}
 
 // --- 2. SHORTCUTS ---
 document.addEventListener('keydown', (e) => {
@@ -42,14 +55,14 @@ updateThemeUI(localStorage.getItem('theme') || 'dark');
 // --- 4. CONSOLA ---
 const term = new Terminal({ fontFamily: 'JetBrains Mono', theme: { background: '#00000000' }, fontSize: 13, cursorBlink: true, convertEol: true });
 const fitAddon = new FitAddon.FitAddon(); term.loadAddon(fitAddon); term.open(document.getElementById('terminal'));
-term.writeln('\x1b[1;35m>>> AETHER PANEL V1.6.0 ONLINE.\x1b[0m\r\n');
+term.writeln('\x1b[1;35m>>> AETHER PANEL V1.6.0 READY.\x1b[0m\r\n');
 window.onresize = () => { if (document.getElementById('tab-console').classList.contains('active')) fitAddon.fit(); };
 term.onData(d => socket.emit('command', d));
 socket.on('console_data', d => term.write(d));
 socket.on('logs_history', d => { term.write(d); setTimeout(() => fitAddon.fit(), 200); });
 function sendConsoleCommand() { const i = document.getElementById('console-input'); if (i && i.value.trim()) { socket.emit('command', i.value); i.value = ''; } }
 
-// --- 5. MODS STORE ---
+// --- 5. MODS ---
 const modsDB = [ 
     { name: "Jei", fullName: "Just Enough Items", url: "https://mediafilez.forgecdn.net/files/5936/206/jei-1.20.1-forge-15.3.0.4.jar", icon: "fa-book", color: "#2ecc71" }, 
     { name: "Iron Chests", fullName: "Iron Chests", url: "https://mediafilez.forgecdn.net/files/4670/664/ironchest-1.20.1-14.4.4.jar", icon: "fa-box", color: "#95a5a6" }, 
@@ -69,49 +82,41 @@ let pendingInstall=null;
 async function installVersion(v){ pendingInstall=v; document.getElementById('version-modal').style.display='none'; try{ const s=await fetch('/api/stats').then(r=>r.json()); const m=Math.floor(s.ram_total/1073741824); const sl=document.getElementById('ram-slider'); if(sl){sl.max=m;sl.value=Math.min(4,m)} const sr=document.getElementById('sys-ram-total'); if(sr)sr.innerText=m.toFixed(1); }catch(e){} document.getElementById('ram-modal').style.display='flex'; }
 function updateRamDisplay(v){ document.getElementById('ram-display-val').innerText=v; }
 function closeRamModal(){ document.getElementById('ram-modal').style.display='none'; pendingInstall=null; }
+async function confirmInstall(){ if(!pendingInstall)return; const ram=document.getElementById('ram-slider').value; const v=pendingInstall; closeRamModal(); let url=''; Toastify({text:'Obteniendo enlace...',style:{background:'#3b82f6'}}).showToast(); try{ if(v.type==='vanilla'){const r=await api('nebula/resolve-vanilla',{url:v.url});if(r&&r.url)url=r.url;else throw new Error()} else if(v.type==='paper'){const r=await fetch(`https://api.papermc.io/v2/projects/paper/versions/${v.id}`);if(!r.ok)throw new Error();const d=await r.json();const b=d.builds[d.builds.length-1];url=`https://api.papermc.io/v2/projects/paper/versions/${v.id}/builds/${b}/downloads/paper-${v.id}-${b}.jar`} else if(v.type==='fabric'){const r=await fetch('https://meta.fabricmc.net/v2/versions/loader');const d=await r.json();url=`https://meta.fabricmc.net/v2/versions/loader/${v.id}/${d[0].version}/1.0.1/server/jar`} else if(v.type==='forge'){const res=await api('nebula/resolve-forge',{version:v.id});if(res&&res.url)url=res.url;else throw new Error()} if(url){ await api('settings',{ram:ram+'G'}); let f='server.jar'; if(v.type==='forge')f='forge-installer.jar'; api('install',{url,filename:f}); Toastify({text:'Descargando...',style:{background:'#10b981'}}).showToast(); } }catch(e){ Toastify({text:'Error versión',style:{background:'#ef4444'}}).showToast(); } }
 
-async function confirmInstall(){ 
-    if(!pendingInstall) return; 
-    const ram=document.getElementById('ram-slider').value; 
-    const v=pendingInstall; closeRamModal(); 
-    let url=''; 
-    Toastify({text:'Buscando enlace...',style:{background:'#3b82f6'}}).showToast();
-    try{ 
-        if(v.type==='vanilla'){const r=await api('nebula/resolve-vanilla',{url:v.url});if(r&&r.url)url=r.url;else throw new Error()} 
-        else if(v.type==='paper'){const r=await fetch(`https://api.papermc.io/v2/projects/paper/versions/${v.id}`);if(!r.ok)throw new Error();const d=await r.json();const b=d.builds[d.builds.length-1];url=`https://api.papermc.io/v2/projects/paper/versions/${v.id}/builds/${b}/downloads/paper-${v.id}-${b}.jar`} 
-        else if(v.type==='fabric'){const r=await fetch('https://meta.fabricmc.net/v2/versions/loader');const d=await r.json();url=`https://meta.fabricmc.net/v2/versions/loader/${v.id}/${d[0].version}/1.0.1/server/jar`} 
-        else if(v.type==='forge'){const res=await api('nebula/resolve-forge',{version:v.id});if(res&&res.url)url=res.url;else throw new Error()} 
-        
-        if(url){ 
-            await api('settings',{ram:ram+'G'}); 
-            let f='server.jar'; if(v.type==='forge')f='forge-installer.jar'; 
-            api('install',{url,filename:f}); 
-            Toastify({text:'Descargando e instalando...',style:{background:'#10b981'}}).showToast(); 
-        } 
-    }catch(e){ Toastify({text:'Error al obtener versión',style:{background:'#ef4444'}}).showToast(); } 
-}
-
-// --- MONITOR ---
+// --- MONITOR & CHARTS (FIXED GHz) ---
 const cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type:'line', data:{labels:Array(20).fill(''),datasets:[{data:Array(20).fill(0),borderColor:'#8b5cf6',backgroundColor:'#8b5cf615',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},scales:{x:{display:false},y:{min:0,max:100,grid:{display:false},ticks:{display:false}}},plugins:{legend:{display:false}}} });
 const ramChart = new Chart(document.getElementById('ramChart').getContext('2d'), { type:'line', data:{labels:Array(20).fill(''),datasets:[{data:Array(20).fill(0),borderColor:'#3b82f6',backgroundColor:'#3b82f615',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},scales:{x:{display:false},y:{min:0,grid:{display:false},ticks:{display:false}}},plugins:{legend:{display:false}}} });
 
 setInterval(() => {
     fetch('/api/stats').then(r => r.json()).then(d => {
-        cpuChart.data.datasets[0].data.shift(); cpuChart.data.datasets[0].data.push(d.cpu); cpuChart.update();
+        // CPU Update
+        cpuChart.data.datasets[0].data.shift(); 
+        cpuChart.data.datasets[0].data.push(d.cpu); 
+        cpuChart.update();
         document.getElementById('cpu-val').innerText = d.cpu.toFixed(1) + '%';
-        document.getElementById('cpu-freq').innerText = d.cpu_freq + ' MHz';
         
-        const toGB = (b) => (b / 1073741824).toFixed(1);
-        const ramUsed = toGB(d.ram_used), ramTotal = toGB(d.ram_total), ramFree = toGB(d.ram_free);
-        
-        ramChart.options.scales.y.max = parseFloat(ramTotal); ramChart.data.datasets[0].data.shift(); ramChart.data.datasets[0].data.push(parseFloat(ramUsed)); ramChart.update();
-        document.getElementById('ram-val').innerText = `${ramUsed} / ${ramTotal} GB`;
-        document.getElementById('ram-free').innerText = ramFree + ' GB Libre';
+        // FRECUENCIA GHz (Dividir MHz por 1000)
+        if (d.cpu_freq && d.cpu_freq > 0) {
+            const ghz = (d.cpu_freq / 1000).toFixed(1);
+            document.getElementById('cpu-freq').innerText = ghz + ' GHz';
+        } else {
+            document.getElementById('cpu-freq').innerText = 'N/A';
+        }
 
+        // RAM Update
+        const toGB = (b) => (b / 1073741824).toFixed(1);
+        ramChart.options.scales.y.max = parseFloat(toGB(d.ram_total)); 
+        ramChart.data.datasets[0].data.shift(); 
+        ramChart.data.datasets[0].data.push(parseFloat(toGB(d.ram_used))); 
+        ramChart.update();
+        document.getElementById('ram-val').innerText = `${toGB(d.ram_used)} / ${toGB(d.ram_total)} GB`;
+        document.getElementById('ram-free').innerText = toGB(d.ram_free) + ' GB Libre';
+
+        // Disk Update
         const diskMB = (d.disk_used / 1048576).toFixed(0);
         document.getElementById('disk-val').innerText = diskMB + ' MB';
-        const diskPercent = Math.min((d.disk_used / d.disk_total) * 100, 100);
-        document.getElementById('disk-fill').style.width = diskPercent + '%';
+        document.getElementById('disk-fill').style.width = Math.min((d.disk_used / d.disk_total) * 100, 100) + '%';
         
         socket.on('status_change', s => { const w = document.getElementById('status-widget'); if(w) { w.className = 'status-widget ' + s; document.getElementById('status-text').innerText = s; } });
     }).catch(() => { });
@@ -128,7 +133,7 @@ function setTab(t, btn) {
 }
 function api(ep, body) { return fetch('/api/' + ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()); }
 
-// --- FILES ---
+// --- FILES & CONFIG ---
 function loadFileBrowser(p){ currentPath=p; document.getElementById('file-breadcrumb').innerText='/root'+(p?'/'+p:''); api('files?path='+encodeURIComponent(p)).then(fs=>{ const l=document.getElementById('file-list'); l.innerHTML=''; if(p){ const b=document.createElement('div'); b.className='file-row'; b.innerHTML='<span>..</span>'; b.onclick=()=>{ const a=p.split('/'); a.pop(); loadFileBrowser(a.join('/')) }; l.appendChild(b) } fs.forEach(f=>{ const e=document.createElement('div'); e.className='file-row'; e.innerHTML=`<span><i class="fa-solid ${f.isDir?'fa-folder':'fa-file'}"></i> ${f.name}</span><span>${f.size}</span>`; if(f.isDir)e.onclick=()=>loadFileBrowser((p?p+'/':'')+f.name); else e.onclick=()=>openEditor((p?p+'/':'')+f.name); l.appendChild(e) }) }) }
 function uploadFile(){ const i=document.createElement('input'); i.type='file'; i.onchange=(e)=>{const f=new FormData();f.append('file',e.target.files[0]);fetch('/api/files/upload',{method:'POST',body:f}).then(r=>r.json()).then(d=>{if(d.success)loadFileBrowser(currentPath)})}; i.click() }
 const ed=ace.edit("ace-editor"); ed.setTheme("ace/theme/dracula"); ed.setOptions({fontSize:"14px"});
@@ -140,19 +145,15 @@ function createBackup(){ api('backups/create').then(()=>setTimeout(loadBackups,2
 function deleteBackup(n){ if(confirm('¿Borrar?'))api('backups/delete',{name:n}).then(loadBackups) }
 function restoreBackup(n){ if(confirm('¿Restaurar?'))api('backups/restore',{name:n}) }
 
-// --- CONFIG ---
-const propDesc = { 'online-mode': 'ACTIVADO: Solo Premium.\nDESACTIVADO: Crackeado.', 'motd': 'Mensaje.', 'max-players': 'Máximo jugadores.', 'white-list': 'Lista blanca.', 'pvp': 'Daño jugadores.', 'allow-flight': 'Volar survival.', 'view-distance': 'Chunks visión.', 'difficulty': 'Dificultad.', 'gamemode': 'Modo juego.', 'hardcore': 'Ban morir.', 'enable-command-block': 'Bloques comando.' };
+const propDesc = { 'online-mode': 'ACTIVADO: Solo Premium.\nDESACTIVADO: Crackeado.', 'motd': 'Mensaje.', 'max-players': 'Límite.', 'white-list': 'Lista blanca.', 'pvp': 'Daño.', 'allow-flight': 'Volar.', 'view-distance': 'Chunks.', 'difficulty': 'Dificultad.', 'gamemode': 'Modo.', 'hardcore': 'Ban.', 'enable-command-block': 'Bloques.' };
 function loadCfg() { 
-    // Cargar server.properties
     fetch('/api/config').then(r => r.json()).then(d => { 
         const c = document.getElementById('cfg-list'); c.innerHTML = ''; 
         if(Object.keys(d).length === 0) { c.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">⚠️ Inicia el servidor una vez.</p>'; return; }
-        
         const entries = Object.entries(d).sort((a,b) => a[0] === 'online-mode' ? -1 : 1);
         for(const [k, v] of entries) {
             const tooltip = propDesc[k] ? `<span class="help-icon" data-tooltip="${propDesc[k]}">?</span>` : '';
             let displayKey = k; if(k === 'online-mode') displayKey = 'Modo Premium (Online Mode)';
-            
             if(v === 'true' || v === 'false') {
                 const ch = v === 'true'; const lbl = ch ? 'Activado' : 'Desactivado'; 
                 c.innerHTML += `<div class="cfg-item"><label class="cfg-label" style="display:flex;align-items:center">${displayKey} ${tooltip}</label><div class="cfg-switch-wrapper"><span style="font-size:0.8rem;color:var(--muted)">${lbl}</span><label class="switch"><input type="checkbox" class="cfg-bool" data-k="${k}" ${ch?'checked':''} onchange="this.parentElement.previousElementSibling.innerText=this.checked?'Activado':'Desactivado'"><span class="slider round"></span></label></div></div>`;
@@ -161,33 +162,16 @@ function loadCfg() {
             }
         } 
     }).catch(e => {});
-    
-    // Cargar Settings
-    fetch('/api/settings').then(r => r.json()).then(settings => {
-        const domainInput = document.getElementById('cfg-custom-domain');
-        if (domainInput) { domainInput.value = settings.custom_domain || ''; }
-        
-        // FIX RAM SLIDER
-        const ramSlider = document.getElementById('ram-slider');
-        const ramDisplay = document.getElementById('ram-display-val');
-        if (ramSlider && settings.ram) {
-            const ramNum = parseInt(settings.ram.replace('G', ''));
-            ramSlider.value = ramNum;
-            if(ramDisplay) ramDisplay.innerText = ramNum;
-        }
-    }).catch(e => {});
+    fetch('/api/settings').then(r => r.json()).then(settings => { const d = document.getElementById('cfg-custom-domain'); if(d) d.value = settings.custom_domain || ''; }).catch(e => {});
 }
-
 function saveCfg() { 
     const d = {}; 
     document.querySelectorAll('.cfg-in').forEach(i => { if(i.dataset.k) d[i.dataset.k] = i.value }); 
     document.querySelectorAll('.cfg-bool').forEach(i => { if(i.dataset.k) d[i.dataset.k] = i.checked ? 'true' : 'false' });
     api('config', d); 
-    
-    const domain = document.getElementById('cfg-custom-domain').value || null;
-    const ram = document.getElementById('ram-slider') ? document.getElementById('ram-slider').value + 'G' : '4G'; 
+    const domain = document.getElementById('cfg-custom-domain').value;
+    const ram = document.getElementById('ram-slider') ? document.getElementById('ram-slider').value : '4';
     api('settings', { custom_domain: domain, ram: ram }); 
-    
     const ipDisplay = document.getElementById('server-ip-display');
     if (ipDisplay) {
         const port = ipDisplay.dataset.fullIp.split(':')[1];
@@ -195,34 +179,12 @@ function saveCfg() {
         const newDisplay = domain ? `${domain}:${port}` : `${currentIP}:${port}`;
         ipDisplay.innerText = newDisplay; ipDisplay.dataset.fullIp = newDisplay;
     }
-    
-    Toastify({text:'Configuración Guardada', style:{background:'#10b981'}}).showToast(); 
+    Toastify({text:'Guardado', style:{background:'#10b981'}}).showToast(); 
 }
 
-// --- UPDATER ---
 checkUpdate(true);
-function checkUpdate(isAuto = false) {
-    if (!isAuto) Toastify({ text: 'Buscando actualizaciones...', style: { background: 'var(--p)' } }).showToast();
-    fetch('/api/update/check').then(r => r.json()).then(d => {
-        if (d.type !== 'none') showUpdateModal(d);
-        else if (!isAuto) Toastify({ text: 'Sistema actualizado', style: { background: '#10b981' } }).showToast();
-    }).catch(e => { if (!isAuto) Toastify({ text: 'Error GitHub', style: { background: '#ef4444' } }).showToast(); });
-}
-function showUpdateModal(d) {
-    const m = document.getElementById('update-modal'); if(!m) return;
-    const t = document.getElementById('update-text'); const a = document.getElementById('up-actions'); const ti = document.getElementById('up-title');
-    if (d.type === 'hard') {
-        ti.innerText = "Actualización Mayor"; t.innerText = `Versión local: ${d.local}\nNueva versión: ${d.remote}\n\nSe requiere reinicio.`;
-        a.innerHTML = `<button onclick="doUpdate('hard')" class="btn btn-primary">ACTUALIZAR</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`;
-        m.style.display = 'flex';
-    }
-}
-function doUpdate(type) {
-    document.getElementById('update-modal').style.display = 'none';
-    fetch('/api/update/perform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) }).then(r => r.json()).then(d => {
-        if (d.mode === 'soft') { Toastify({ text: 'Aplicado.', style: { background: '#10b981' } }).showToast(); setTimeout(() => location.reload(), 1500); }
-        if (d.mode === 'hard') { Toastify({ text: 'Reiniciando...', style: { background: '#f59e0b' } }).showToast(); setTimeout(() => location.reload(), 8000); }
-    });
-}
+function checkUpdate(isAuto = false) { if (!isAuto) Toastify({ text: 'Buscando...', style: { background: 'var(--p)' } }).showToast(); fetch('/api/update/check').then(r => r.json()).then(d => { if (d.type !== 'none') showUpdateModal(d); else if (!isAuto) Toastify({ text: 'Actualizado', style: { background: '#10b981' } }).showToast(); }).catch(e => {}); }
+function showUpdateModal(d) { const m = document.getElementById('update-modal'); if(!m) return; const t = document.getElementById('update-text'); const a = document.getElementById('up-actions'); const ti = document.getElementById('up-title'); if (d.type === 'hard') { ti.innerText = "Actualización Mayor"; t.innerText = `Local: ${d.local} -> Nueva: ${d.remote}`; a.innerHTML = `<button onclick="doUpdate('hard')" class="btn btn-primary">ACTUALIZAR</button><button onclick="document.getElementById('update-modal').style.display='none'" class="btn btn-ghost">Cancelar</button>`; m.style.display = 'flex'; } }
+function doUpdate(type) { document.getElementById('update-modal').style.display = 'none'; fetch('/api/update/perform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) }).then(r => r.json()).then(d => { if (d.mode === 'soft') { Toastify({ text: 'Aplicado.', style: { background: '#10b981' } }).showToast(); setTimeout(() => location.reload(), 1500); } if (d.mode === 'hard') { Toastify({ text: 'Reiniciando...', style: { background: '#f59e0b' } }).showToast(); setTimeout(() => location.reload(), 8000); } }); }
 function forceUIUpdate(){ document.getElementById('force-ui-modal').style.display='flex'; }
 function confirmForceUI(){ document.getElementById('force-ui-modal').style.display='none'; Toastify({text:'Descargando...',style:{background:'#8b5cf6'}}).showToast(); fetch('/api/update/perform',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'soft'})}).then(r=>r.json()).then(d=>{ if(d.success){Toastify({text:'¡Actualizado!',style:{background:'#10b981'}}).showToast();setTimeout(()=>location.reload(),1500)} }); }
