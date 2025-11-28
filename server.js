@@ -248,26 +248,33 @@ app.get('/api/stats', (req, res) => {
         if(!IS_WIN) {
             exec(`du -sb ${SERVER_DIR}`, (error, stdout) => {
                 if (!error && stdout) diskBytes = parseInt(stdout.split(/\s+/)[0]);
-                sendStats(cpuPercent, diskBytes, res);
-            });
-        } else {
-            sendStats(cpuPercent, getDirSize(SERVER_DIR), res);
-        }
-    });
-});
-function sendStats(cpuPercent, diskBytes, res) {
+                function sendStats(cpuPercent, diskBytes, res) {
     const cpus = os.cpus();
+    let cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
+
+    // --- FIX: Detectar MHz reales en VPS ---
+    // Si Node devuelve 0 y estamos en Linux, leemos la info directa del sistema
+    if (cpuSpeed === 0 && process.platform !== 'win32') {
+        try {
+            const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
+            // Buscamos la línea "cpu MHz : xxxx.xxx"
+            const match = cpuInfo.match(/cpu MHz\s+:\s+(\d+(\.\d+)?)/);
+            if (match) cpuSpeed = parseFloat(match[1]);
+        } catch (e) {
+            // Si falla, se queda en 0
+        }
+    }
+
     res.json({
         cpu: cpuPercent * 100,
-        cpu_freq: cpus.length > 0 ? cpus[0].speed : 0,
+        cpu_freq: cpuSpeed,
         ram_total: os.totalmem(),
         ram_free: os.freemem(),
         ram_used: os.totalmem() - os.freemem(),
         disk_used: diskBytes,
-        disk_total: 20 * 1024 * 1024 * 1024
+        disk_total: 20 * 1024 * 1024 * 1024 // 20GB Límite Visual
     });
 }
-
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:a', async (req, res) => { try { if (mcServer[req.params.a]) await mcServer[req.params.a](); res.json({ success: true }); } catch (e) { res.status(500).json({}); } });
 
