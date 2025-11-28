@@ -4,12 +4,13 @@
 
 # 🌌 Aether Panel
 
-**El panel de control ligero, moderno y potente para servidores de Minecraft.**  
+**El panel de control ligero, moderno y potente para servidores de Minecraft.**
 Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
-[![Version](https://img.shields.io/badge/version-1.5.4-8b5cf6?style=for-the-badge&logo=git)](https://github.com/reychampi/aether-panel)
+[![Version](https://img.shields.io/badge/version-1.6.0-8b5cf6?style=for-the-badge&logo=git)](https://github.com/reychampi/aether-panel)
 [![Status](https://img.shields.io/badge/status-stable-10b981?style=for-the-badge)](https://github.com/reychampi/aether-panel)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D16-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+![Windows](https://img.shields.io/badge/Windows-Nativo-0078D6?style=for-the-badge&logo=windows)
 
 [Instalación](#-instalación-rápida) • [Sistemas Compatibles](#-sistemas-operativos-soportados) • [Características](#-características)
 
@@ -19,107 +20,91 @@ Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
 
 ## ✨ Descripción
 
-**Aether Panel** es una solución completa para administrar servidores de Minecraft en Linux.  
-Está diseñado para ser visualmente impactante, técnicamente sólido y extremadamente fácil de usar, eliminando configuraciones manuales innecesarias por terminal.
+**Aether Panel** es una solución todo-en-uno para administrar servidores de Minecraft. Diseñado para ser visualmente impactante y técnicamente robusto, elimina la necesidad de configuraciones complejas, ofreciendo una interfaz web reactiva y fácil de usar tanto en **Linux** como en **Windows**.
 
-![Dashboard Preview](https://raw.githubusercontent.com/reychampi/aether-panel/main/public/panel.png)
+![Dashboard Preview](https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png)
 
 ---
 
 ## 🐧 Sistemas Operativos Soportados
 
-Aether Panel funciona en prácticamente cualquier distro Linux moderna gracias a su instalador universal.
+Aether Panel es ahora **Universal** y funciona nativamente en la mayoría de sistemas modernos.
 
-| Familia | Distribuciones Probadas | Gestor | Estado |
-|--------|---------------------------|--------|--------|
-| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ Nativo |
-| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ Nativo |
-| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ Nativo |
+| Familia | Distribuciones / SO | Método | Estado |
+| :--- | :--- | :--- | :--- |
+| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ **Nativo** |
+| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ **Nativo** |
+| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ **Nativo** |
+| **Windows** | Windows 10, 11, Server 2019+ | `.bat` | ✅ **Nativo** |
+
+> ℹ️ **Nota para Windows:** Ya no es necesario usar WSL2. El panel se ejecuta directamente sobre Node.js en Windows.
 
 ---
 
 ## 🚀 Novedades V1.5.x
 
 ### 🎮 Experiencia de Usuario (UI/UX)
-
-- **Consola Interactiva:** Terminal web con capacidad de enviar comandos al instante.  
-- **Sistema de Ayuda:** Tooltips `(?)` con explicaciones en todas las opciones de `server.properties`.  
-- **Atajos de Teclado:** Usa `Alt + 1-8` para navegar rápidamente.  
-- **IP Copiable:** Clic para copiar la IP del servidor.
+* **Consola Interactiva:** Envía comandos al servidor directamente desde la web.
+* **Sistema de Ayuda:** Tooltips `(?)` explicativos en todas las opciones del `server.properties`.
+* **Atajos de Teclado:** Navega rápido usando `Alt + 1-8` y cierra ventanas con `ESC`.
+* **IP Copiable:** Haz clic en la IP de la cabecera para copiarla al portapapeles.
 
 ### 🛠️ Mejoras Técnicas
-
-- **Instalador Universal:** Detecta automáticamente tu distro (Ubuntu/Fedora/Arch).  
-- **Actualizador UI:** Botón para refrescar la interfaz sin reiniciar servicios.  
-- **Temas:** Soporte total para Light/Dark Mode.  
-- **Resolución de Versiones:** Descargas de Forge/Fabric/Paper más estables.
+* **Soporte Windows Nativo:** Nuevo lanzador `start_windows.bat` que instala dependencias (Node/Java) automáticamente.
+* **Instalador Linux Universal:** Detección automática de distro (Ubuntu/Fedora/Arch).
+* **Actualizador UI:** Botón para forzar la actualización de la interfaz gráfica sin reiniciar.
+* **Soporte de Temas:** Compatibilidad total con Modo Claro y Oscuro.
+* **Resolución de Versiones:** Lógica mejorada para descargar Forge, Fabric y Paper.
 
 ---
 
 ## 📦 Instalación Rápida
 
-Ejecuta este comando como `root`:
+### 🐧 En Linux (VPS/Dedicado)
+Accede a tu terminal como usuario `root` y ejecuta:
+curl -sL [https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh](https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh) | bash
 
-<pre>
-curl -sL https://raw.githubusercontent.com/reychampi/aether-panel/main/installserver.sh | bash
-</pre>
+🪟 En Windows (PC/Server)
 
-El instalador se encargará de:
+    Descarga el código del repositorio (Botón Code > Download ZIP) y descomprímelo.
 
-- Detectar tu SO  
-- Instalar dependencias (Java, Node.js, Git, Zip, Rsync)  
-- Configurar el servicio systemd  
-- Descargar archivos del panel  
-- Iniciar el servicio en el puerto **3000**
+    Haz doble clic en el archivo start_windows.bat.
 
----
+    El script instalará automáticamente Node.js y Java si no los tienes.
 
-## ⚡ Características
+    El panel se abrirá automáticamente.
 
-- 🖥️ **Monitor en Tiempo Real:** CPU, RAM y disco con actualización por sockets.  
-- 💻 **Consola Web:** Terminal en vivo con colores y soporte de comandos.  
-- 📂 **Gestor de Archivos:** Editor integrado con resaltado de sintaxis.  
-- 📥 **Instalador de Núcleos:** Descarga Vanilla, Paper, Fabric y Forge.  
-- 📦 **Sistema de Backups:** Genera y restaura copias en segundos.  
-- 🧩 **Tienda de Mods:** Instalación directa de mods populares.  
-- ⚙️ **Configuración Visual:** Edita opciones de `server.properties` con UI gráfica.  
-- 🔄 **Smart Updater:** Sistema OTA para actualizar el panel.  
+⚡ Características
 
----
+    🖥️ Monitor en Tiempo Real: Gráficas de CPU, RAM y Disco.
 
-## 🛠️ Solución de Problemas Frecuentes
+    💻 Consola Web: Terminal en vivo con colores y envío de comandos.
 
-### 🔹 El panel no carga en el navegador
+    📂 Gestor de Archivos: Editor de texto integrado con resaltado de sintaxis.
 
-Verifica que el puerto **3000** esté abierto:
+    📥 Instalador de Núcleos: Vanilla, Paper, Fabric y Forge a un clic.
 
-**Ubuntu/Debian**
-<pre>
-sudo ufw allow 3000/tcp
-</pre>
+    📦 Backups: Sistema de copias de seguridad .tar.gz.
 
-**Fedora/CentOS**
-<pre>
-sudo firewall-cmd --permanent --add-port=3000/tcp
-sudo firewall-cmd --reload
-</pre>
+    🧩 Tienda de Mods: Buscador integrado para instalar mods populares.
 
----
+    ⚙️ Configuración Visual: Edita server.properties con interruptores fáciles.
 
-### 🔹 Error: `command not found` o `$'\r'`
+    🔄 Smart Updater: Sistema de actualizaciones OTA integrado.
 
-Esto ocurre si los `.sh` fueron subidos desde Windows (fin de línea CRLF).  
-Ejecuta en la carpeta del panel:
+🛠️ Solución de Problemas Frecuentes
 
-<pre>
+El panel no carga en el navegador Asegúrate de abrir el puerto 3000 en tu firewall:
+
+    Linux (UFW): sudo ufw allow 3000/tcp
+
+    Windows: Asegúrate de dar permisos en la ventana emergente del Firewall de Windows al iniciar Node.js.
+
+Error "command not found" o "$'\r'" (Linux) Si subiste los archivos manualmente desde Windows, es posible que tengan formato incorrecto. Ejecuta:
 sed -i 's/\r$//' *.sh
-</pre>
-
----
 
 <div align="center">
 
-**Desarrollado por ReyChampi**  
-⭐ Si te gusta el proyecto, ¡dale una estrella en GitHub!
+Desarrollado por ReyChampi Reportar un Bug
 
 </div>
