@@ -1,53 +1,72 @@
 @echo off
+setlocal enabledelayedexpansion
 title Aether Panel - Windows Launcher
-cls
-echo ==========================================
-echo        AETHER PANEL FOR WINDOWS
-echo ==========================================
-echo.
+color 0b
 
-:: 1. Verificar Node.js
-node -v >nul 2>&1
+:: ==========================================
+::   VERIFICACION DE PERMISOS
+:: ==========================================
+net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [X] Node.js no esta instalado. Por favor instalalo desde nodejs.org
+    echo.
+    echo [!] Necesitas ejecutar esto como Administrador para la primera instalacion.
+    echo     (Click derecho -> Ejecutar como administrador)
+    echo.
     pause
     exit
 )
-echo [V] Node.js detectado.
 
-:: 2. Verificar Java
+cls
+echo ==========================================
+echo        AETHER PANEL - WINDOWS
+echo ==========================================
+echo.
+
+:: 1. INSTALACION DE DEPENDENCIAS (Solo si faltan)
+node -v >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [!] Instalando Node.js...
+    winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements
+)
+
 java -version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [X] Java no esta instalado. Minecraft no funcionara.
-    echo     Instala Java 17 o superior.
-    pause
-) else (
-    echo [V] Java detectado.
+    echo [!] Instalando Java 21...
+    winget install -e --id EclipseAdoptium.Temurin.21.JDK --accept-source-agreements
 )
 
-:: 3. Instalar Dependencias (Si faltan)
+:: 2. PREPARAR PANEL
 if not exist "node_modules" (
-    echo.
-    echo [!] Instalando dependencias del panel...
-    call npm install
+    echo [!] Instalando librerias...
+    call npm install --production
 )
 
-:: 4. Crear directorios basicos
 if not exist "public" mkdir public
 if not exist "servers\default" mkdir servers\default
 
-:: 5. Descargar Assets si faltan (Usando Powershell porque Windows no tiene curl/wget fiable en todos)
 if not exist "public\logo.ico" (
-    echo [!] Descargando logos...
+    echo [!] Bajando logos...
     powershell -Command "Invoke-WebRequest https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.svg -OutFile public\logo.svg"
     powershell -Command "Invoke-WebRequest https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.ico -OutFile public\logo.ico"
 )
 
-:: 6. Iniciar Servidor
+:: 3. OBTENER IP LOCAL REAL
+for /f "delims=" %%a in ('powershell -command "([System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object {$_.AddressFamily -eq 'InterNetwork'})[0].IPAddressToString"') do set SERVER_IP=%%a
+
+cls
+echo ==========================================
+echo    AETHER PANEL ESTA LISTO
+echo ==========================================
 echo.
-echo [!] Iniciando Aether Panel en el puerto 3000...
-echo     Accede en tu navegador a: http://localhost:3000
+echo [V] Servidor iniciado.
+echo.
+echo     Acceso Local:   http://localhost:3000
+echo     Acceso Red:     http://%SERVER_IP%:3000
+echo.
+echo [!] Comparte la IP de Red para que otros entren.
+echo [!] Cierra esta ventana para apagar el panel.
 echo.
 
+:: Arrancar
 node server.js
 pause
