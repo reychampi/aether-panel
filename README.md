@@ -34,17 +34,16 @@ Aether Panel es **universal** y funciona en la mayoría de sistemas modernos.
 
 | Familia | Distribuciones / SO | Método | Estado |
 |--------|----------------------|--------|--------|
-| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ **Nativo** |
-| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ **Nativo** |
-| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ **Nativo** |
-| **Windows** | Windows 10, 11, Server 2019+ | `.bat` | 🟡 **Nativo (no testeado)** |
+| **Debian** | Ubuntu 20.04+, Debian 10+, Mint | `apt` | ✅ Nativo |
+| **RHEL** | Fedora 36+, CentOS 8+, Rocky | `dnf` | ✅ Nativo |
+| **Arch** | Arch Linux, Manjaro | `pacman` | ✅ Nativo |
+| **Windows** | Windows 10, 11, Server 2019+ | `.bat` | 🟡 Nativo (no testeado) |
 
 ---
 
 ## 🚀 Novedades V1.6.x
 
 ### 🎮 Experiencia de Usuario
-
 - **Consola Interactiva** con envío de comandos en vivo.  
 - **Sistema de Ayuda** con tooltips `(?)` explicativos.  
 - **Atajos de Teclado** (`Alt + 1–8`, `ESC`).  
@@ -52,12 +51,11 @@ Aether Panel es **universal** y funciona en la mayoría de sistemas modernos.
 - **Interfaz más rápida**, animaciones suaves y modo claro/oscuro mejorado.
 
 ### 🛠️ Mejoras Técnicas
-
-- **start_windows.bat**: Instalación automática de Node.js y Java *(no testeado)*.  
-- **Instalador Linux Universal** con detección de distro.  
-- **Actualizador de UI** sin reiniciar.  
-- **Instalador de Núcleos optimizado** (Vanilla, Paper, Forge, Fabric).  
-- **Descarga de versiones más estable**.
+- `start_windows.bat`: instalación automática de Node.js y Temurin (no testeado).  
+- Instalador Linux universal con detección de distro.  
+- Actualizador OTA de la UI sin reiniciar.  
+- Instalador de núcleos optimizado (Vanilla, Paper, Forge, Fabric).  
+- Descarga de versiones más estable.
 
 ---
 
@@ -72,62 +70,71 @@ Ejecuta como **root**:
 <pre>
 curl -sL https://raw.githubusercontent.com/reychampi/aether-panel/refs/heads/main/installserver.sh | bash
 </pre>
-🪟 Windows (PC / Server) — 🟡 No testeado todavía
 
-    Descarga el repositorio (Code → Download ZIP).
+---
 
-    Descomprime la carpeta.
+### 🪟 Windows (PC / Server) — 🟡 No testeado
 
-    Ejecuta:
+1. Descarga el repositorio (`Code → Download ZIP`).  
+2. Descomprime la carpeta.  
+3. Ejecuta:
 
+<pre>
 start_windows.bat
+</pre>
 
 El script instalará automáticamente:
 
-    Node.js
-
-    Java (Temurin)
+- Node.js  
+- Java (Temurin)  
 
 El panel se abrirá automáticamente en tu navegador.
-⚡ Características
 
-    🖥️ Monitor en Tiempo Real: CPU, RAM y almacenamiento.
+---
 
-    💻 Consola Web interactiva con colores.
+## ⚡ Características
 
-    📂 Gestor de Archivos con editor de código.
+- 🖥️ Monitor en tiempo real (CPU, RAM, almacenamiento).  
+- 💻 Consola web interactiva con colores.  
+- 📂 Gestor de archivos con editor de código.  
+- 📥 Instalador de núcleos (Vanilla, Paper, Fabric, Forge).  
+- 📦 Backups `.tar.gz` con un clic.  
+- 🧩 Tienda de Mods integrada.  
+- ⚙️ Editor visual de `server.properties`.  
+- 🔄 Smart Updater OTA sin reinstalar.
 
-    📥 Instalador de Núcleos (Vanilla, Paper, Fabric, Forge).
+---
 
-    📦 Backups .tar.gz con un clic.
+## 🛠️ Solución de Problemas Frecuentes
 
-    🧩 Tienda de Mods integrada.
+### 🔹 El panel no carga en el navegador
 
-    ⚙️ Edición Visual de server.properties.
+Asegúrate de abrir el puerto **3000**.
 
-    🔄 Smart Updater ota sin reinstalar.
-
-🛠️ Solución de Problemas Frecuentes
-🔹 El panel no carga en el navegador
-
-Asegúrate de abrir el puerto 3000.
-Linux (UFW):
-
+**Linux (UFW):**
+<pre>
 sudo ufw allow 3000/tcp
+</pre>
 
-Windows:
+**Windows:**
 
-Permite acceso a Node.js en el Firewall cuando Windows pregunte.
-🔹 Error: command not found o $'\r' (Linux)
+Permite el acceso a Node.js en el Firewall cuando Windows pregunte.
 
-Ocurre si los archivos .sh tienen formato CRLF.
+---
+
+### 🔹 Error: `command not found` o `$'\r'` (Linux)
+
+Ocurre si los `.sh` están en formato **CRLF**.
 
 Solución:
 
+<pre>
 sed -i 's/\r$//' *.sh
+</pre>
+
+---
 
 <div align="center">
-
-Desarrollado por ReyChampi
+Desarrollado por <strong>ReyChampi</strong>  
 ¿Encontraste un error? Abre un Issue.
 </div>
