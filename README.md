@@ -1,5 +1,8 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png" alt="Aether Panel Logo" width="45" height="45"> # Aether Panel
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/reychampi/aether-panel/main/public/logo.png" alt="Logo" width="45" style="vertical-align: middle; margin-right: 10px;">
+  Aether Panel
+</h1>
 
 **El panel de control ligero, moderno y potente para servidores de Minecraft.**
 Gestión inteligente, monitoreo en tiempo real y diseño Glassmorphism.
