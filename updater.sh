@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ============================================================
-# AETHER PANEL - SMART UPDATER
+# AETHER PANEL - ATOMIC UPDATER
+# Método: Sobrescribir todo excepto datos de usuario.
 # ============================================================
 
 LOG="/opt/aetherpanel/update.log"
 APP_DIR="/opt/aetherpanel"
-BACKUP_DIR="/opt/aetherpanel_backup_temp"
 TEMP_DIR="/tmp/aether_update_temp"
 REPO_ZIP="https://github.com/reychampi/aether-panel/archive/refs/heads/main.zip"
 
@@ -15,33 +15,33 @@ log_msg() {
     echo -e "$1"
 }
 
-log_msg "--- 🌌 AETHER UPDATE PROCESS STARTED ---"
+log_msg "--- ⚡ INICIANDO ACTUALIZACIÓN FORZADA ---"
 
+# 1. DESCARGA EN LIMPIO
 rm -rf "$TEMP_DIR"
 mkdir -p "$TEMP_DIR"
 
-log_msg "⬇️  Bajando código fuente..."
-wget -q "$REPO_ZIP" -O /tmp/aether_update.zip || curl -L "$REPO_ZIP" -o /tmp/aether_update.zip
-unzip -q -o /tmp/aether_update.zip -d "$TEMP_DIR"
+log_msg "⬇️  Descargando código..."
+wget -q "$REPO_ZIP" -O /tmp/update.zip || curl -L "$REPO_ZIP" -o /tmp/update.zip
+unzip -q -o /tmp/update.zip -d "$TEMP_DIR"
 
 NEW_SOURCE=$(find "$TEMP_DIR" -name "package.json" | head -n 1 | xargs dirname)
 
 if [ -z "$NEW_SOURCE" ]; then
-    log_msg "❌ ERROR: ZIP corrupto."
+    log_msg "❌ ERROR: Descarga fallida."
     exit 1
 fi
 
-# Detectar cambios en núcleo para reiniciar
-RESTART_REQUIRED=0
-CORE_FILES=("server.js" "mc_manager.js" "package.json")
-for file in "${CORE_FILES[@]}"; do
-    if ! diff -q "$APP_DIR/$file" "$NEW_SOURCE/$file" > /dev/null 2>&1; then
-        RESTART_REQUIRED=1
-    fi
-done
+# 2. PARADA DE SEGURIDAD
+log_msg "🛑 Deteniendo servicio..."
+systemctl stop aetherpanel
 
-log_msg "🔄 Sincronizando archivos..."
-rsync -avc --delete \
+# 3. SOBRESCRITURA MASIVA (Salvo configs)
+log_msg "♻️  Reemplazando archivos del sistema..."
+
+# Usamos rsync para forzar el estado exacto del repo, pero protegiendo tus datos
+# --delete: Borra archivos basura que ya no existan en el repo
+rsync -a --delete \
     --exclude='settings.json' \
     --exclude='servers/' \
     --exclude='backups/' \
@@ -53,17 +53,27 @@ rsync -avc --delete \
     --exclude='installserver.sh' \
     "$NEW_SOURCE/" "$APP_DIR/" >> $LOG 2>&1
 
+# 4. REPARACIÓN DE PERMISOS Y DEPENDENCIAS
+log_msg "🔧 Ajustando permisos y dependencias..."
+cd "$APP_DIR"
+# Forzamos reinstalación de dependencias por si el package.json cambió
+npm install --production >> $LOG 2>&1
+
+# Asegurar ejecutables
 chmod +x "$APP_DIR/updater.sh"
 chmod +x "$APP_DIR/installserver.sh"
 
-if [ $RESTART_REQUIRED -eq 1 ]; then
-    log_msg "📦 Actualizando dependencias..."
-    cd "$APP_DIR"
-    npm install --production >> $LOG 2>&1
-    log_msg "🚀 Reiniciando servicio..."
-    systemctl restart aetherpanel
+# 5. ARRANQUE
+log_msg "🚀 Iniciando Aether Panel..."
+systemctl start aetherpanel
+
+# Verificación final
+sleep 5
+if systemctl is-active --quiet aetherpanel; then
+    log_msg "✅ ACTUALIZACIÓN COMPLETADA EXITOSAMENTE."
 else
-    log_msg "✅ Sincronización visual completada (Sin reinicio)."
+    log_msg "🚨 ERROR: El panel no arrancó. Revisa 'sudo journalctl -u aetherpanel -n 50'"
 fi
 
-rm -rf "$TEMP_DIR" /tmp/aether_update.zip
+# Limpieza
+rm -rf "$TEMP_DIR" /tmp/update.zip
