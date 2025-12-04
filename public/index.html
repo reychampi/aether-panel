@@ -105,6 +105,17 @@
             </header>
 
             <div id="tab-stats" class="tab-content active">
+                
+                <div class="card glass" style="min-height:auto">
+                    <div class="card-title"><i class="fa-solid fa-power-off"></i> Control de Energía</div>
+                    <div class="power-card-grid">
+                        <button onclick="api('power/start')" class="power-btn-large start"><i class="fa-solid fa-play"></i> INICIAR</button>
+                        <button onclick="api('power/restart')" class="power-btn-large restart"><i class="fa-solid fa-rotate"></i> REINICIAR</button>
+                        <button onclick="api('power/stop')" class="power-btn-large stop"><i class="fa-solid fa-stop"></i> DETENER</button>
+                        <button onclick="api('power/kill')" class="power-btn-large kill"><i class="fa-solid fa-skull"></i> KILL</button>
+                    </div>
+                </div>
+
                 <div class="stats-grid">
                     <div class="card glass">
                         <div class="card-title"><i class="fa-solid fa-microchip"></i> CPU</div>
@@ -126,15 +137,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="card glass" style="margin-top:24px; min-height:auto">
-                    <div class="card-title"><i class="fa-solid fa-power-off"></i> Control de Energía</div>
-                    <div class="power-card-grid">
-                        <button onclick="api('power/start')" class="power-btn-large start"><i class="fa-solid fa-play"></i> INICIAR</button>
-                        <button onclick="api('power/restart')" class="power-btn-large restart"><i class="fa-solid fa-rotate"></i> REINICIAR</button>
-                        <button onclick="api('power/stop')" class="power-btn-large stop"><i class="fa-solid fa-stop"></i> DETENER</button>
-                        <button onclick="api('power/kill')" class="power-btn-large kill"><i class="fa-solid fa-skull"></i> KILL</button>
-                    </div>
-                </div>
+                
             </div>
 
             <div id="tab-console" class="tab-content">
