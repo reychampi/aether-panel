@@ -24,20 +24,14 @@ function copyIP() {
     navigator.clipboard.writeText(ip).then(() => Toastify({text: '¡IP Copiada!', style:{background:'#10b981'}}).showToast()); 
 }
 
-// --- 2. SHORTCUTS & UTILS (PRIORIDAD ALTA) ---
-// El 'true' al final asegura que este evento se ejecute ANTES que la terminal o inputs
+// --- 2. SHORTCUTS & UTILS ---
 document.addEventListener('keydown', (e) => {
-    // Detectar ESC o ALT
     if (e.key === 'Escape' || e.key === 'Alt') {
-        // Solo prevenimos ALT si no hay otras teclas (para no romper Alt+Tab)
         if(e.key === 'Alt' && !e.ctrlKey && !e.shiftKey) e.preventDefault(); 
-        
         closeAllModals();
-        
-        // Quitar foco de la terminal/inputs para que el teclado responda a la UI
-        document.activeElement.blur();
+        if(document.activeElement) document.activeElement.blur();
     }
-}, true); // <--- ESTE 'true' ES LA CLAVE
+}, true);
 
 function closeAllModals() { 
     document.querySelectorAll('.modal-overlay').forEach(el => el.style.display = 'none'); 
@@ -57,49 +51,36 @@ function updateThemeUI(mode) {
     const btn = document.getElementById(`theme-btn-${mode}`);
     if(btn) btn.classList.add('active');
     
-    // Actualizar terminal si existe
-    updateTerminalTheme(apply);
+    if (typeof term !== 'undefined') updateTerminalTheme(apply);
 }
 
-// Lógica de colores de la terminal
 function updateTerminalTheme(mode) {
-    if (typeof term === 'undefined') return;
-    
     const isLight = mode === 'light';
-    
-    // Configuración de temas para xterm.js
-    if (isLight) {
-        term.options.theme = { 
-            foreground: '#334155', // Gris oscuro
-            background: '#ffffff', // Blanco puro en material light
-            cursor: '#334155',
-            selectionBackground: 'rgba(0, 0, 0, 0.2)'
-        };
-    } else {
-        term.options.theme = { 
-            foreground: '#ffffff', // Blanco
-            background: '#00000000', // Transparente para glass
-            cursor: '#ffffff',
-            selectionBackground: 'rgba(255, 255, 255, 0.3)'
-        };
-    }
+    term.options.theme = isLight ? { 
+        foreground: '#334155', 
+        background: '#ffffff', 
+        cursor: '#334155',
+        selectionBackground: 'rgba(0, 0, 0, 0.2)'
+    } : { 
+        foreground: '#ffffff', 
+        background: 'transparent', 
+        cursor: '#ffffff',
+        selectionBackground: 'rgba(255, 255, 255, 0.3)'
+    };
 }
 
 function setAccentMode(mode) {
     localStorage.setItem('accent_mode', mode);
     updateAccentUI(mode);
-    if (mode === 'auto') setAccentColor('#8b5cf6', false); 
-    else {
-        const saved = localStorage.getItem('accent_color_val') || '#8b5cf6';
-        setAccentColor(saved, false);
-    }
+    const saved = localStorage.getItem('accent_color_val') || '#8b5cf6';
+    setAccentColor(mode === 'auto' ? '#8b5cf6' : saved, false);
 }
 
 function updateAccentUI(mode) {
     document.getElementById('accent-mode-auto').classList.toggle('active', mode === 'auto');
     document.getElementById('accent-mode-manual').classList.toggle('active', mode === 'manual');
     const picker = document.getElementById('manual-color-wrapper');
-    picker.style.display = (mode === 'manual') ? 'block' : 'none';
+    if(picker) picker.style.display = (mode === 'manual') ? 'block' : 'none';
 }
 
 function setAccentColor(color, save = true) {
@@ -132,13 +113,12 @@ const term = new Terminal({
 const fitAddon = new FitAddon.FitAddon(); 
 term.loadAddon(fitAddon); 
 term.open(document.getElementById('terminal'));
-term.writeln('\x1b[1;35m>>> AETHER PANEL V1.6.0 READY.\x1b[0m\r\n');
+term.writeln('\x1b[1;35m>>> AETHER PANEL READY.\x1b[0m\r\n');
 
-// Listener ESPECÍFICO para la terminal (Doble seguridad para ESC)
 term.attachCustomKeyEventHandler((arg) => {
     if (arg.type === 'keydown' && arg.key === 'Escape') {
         closeAllModals();
-        return false; // Evita que la terminal procese el ESC si queremos cerrar modales
+        return false; 
     }
     return true;
 });
@@ -149,7 +129,7 @@ socket.on('console_data', d => term.write(d));
 socket.on('logs_history', d => { term.write(d); setTimeout(() => fitAddon.fit(), 200); });
 function sendConsoleCommand() { const i = document.getElementById('console-input'); if (i && i.value.trim()) { socket.emit('command', i.value); i.value = ''; } }
 
-// Inicializar tema y terminal
+// --- INICIALIZAR AL FINAL PARA EVITAR BUGS ---
 updateThemeUI(localStorage.getItem('theme') || 'dark');
 setAccentMode(localStorage.getItem('accent_mode') || 'auto');
 setDesign(localStorage.getItem('design_mode') || 'glass');
@@ -181,7 +161,7 @@ function setTab(t, btn) {
     if (t === 'backups') loadBackups();
 }
 
-// --- OTROS MODULOS ---
+// --- API & CHARTS ---
 function api(ep, body) { return fetch('/api/' + ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()); }
 const cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type:'line', data:{labels:Array(20).fill(''),datasets:[{data:Array(20).fill(0),borderColor:'#8b5cf6',backgroundColor:'#8b5cf615',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},scales:{x:{display:false},y:{min:0,max:100,grid:{display:false},ticks:{display:false}}},plugins:{legend:{display:false}}} });
 const ramChart = new Chart(document.getElementById('ramChart').getContext('2d'), { type:'line', data:{labels:Array(20).fill(''),datasets:[{data:Array(20).fill(0),borderColor:'#3b82f6',backgroundColor:'#3b82f615',fill:true,tension:0.4,pointRadius:0,borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},scales:{x:{display:false},y:{min:0,grid:{display:false},ticks:{display:false}}},plugins:{legend:{display:false}}} });

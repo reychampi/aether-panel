@@ -338,8 +338,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .modal-small { height: auto; max-width: 450px; }
 
 /* CARDS */
-.card { padding: 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.card { 
+    padding: 32px; 
+    display: flex; 
+    flex-direction: column; 
+    position: relative; 
+    overflow: visible; /* FIXED: permite crecer */
+    height: auto; 
+    min-height: 200px;
+}
 .card.full { min-height: 500px; }
+
 .card-title { font-size: 0.85rem; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; letter-spacing: 2px; }
 .stat-big { font-size: 2.5rem; font-weight: 800; color: var(--txt); line-height: 1; margin-bottom: 5px; text-shadow: 0 5px 15px rgba(0,0,0,0.5); }
 [data-design="material"] .stat-big, [data-theme="light"] .stat-big { text-shadow: none; }
@@ -348,9 +357,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 /* --- ESTILOS DE AJUSTES (CORREGIDO) --- */
 .cfg-grid { 
     display: grid; 
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
     gap: 20px; 
     margin-top: 20px;
+    padding-bottom: 20px;
 }
 .cfg-item { display: flex; flex-direction: column; gap: 8px; }
 .cfg-label { 
