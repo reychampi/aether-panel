@@ -61,8 +61,6 @@ Aether Panel es **universal** y funciona en la mayoría de sistemas modernos.
 
 ## 📦 Instalación Rápida
 
----
-
 ### 🐧 Linux (VPS / Dedicado)
 
 Ejecuta como **root**:
