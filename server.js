@@ -27,7 +27,8 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-// --- MIDDLEWARE & CACHE CONTROL (FIX: Obliga al navegador a ver los cambios) ---
+// --- MIDDLEWARE & CACHE CONTROL ---
+// ESTO ES IMPORTANTE: Evita que el navegador use la versión vieja del HTML/CSS
 app.use(express.static(path.join(__dirname, 'public'), {
     setHeaders: function (res, path) {
         res.set("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -47,7 +48,6 @@ const GH_API_URL = 'https://api.github.com/repos/reychampi/aether-panel/contents
 
 // --- UTILIDADES ---
 
-// 1. Calcular tamaño directorio (Fallback)
 const getDirSize = (dirPath) => {
     let size = 0;
     try {
@@ -64,7 +64,6 @@ const getDirSize = (dirPath) => {
     return size;
 };
 
-// 2. Detectar IP
 function getServerIP() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
@@ -77,12 +76,10 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// 3. Enviar Estadísticas
 function sendStats(cpuPercent, diskBytes, res) {
     const cpus = os.cpus();
     let cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
 
-    // FIX: Detectar MHz reales en VPS Linux si Node falla
     if (cpuSpeed === 0 && !IS_WIN) {
         try {
             const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
@@ -98,7 +95,7 @@ function sendStats(cpuPercent, diskBytes, res) {
         ram_free: os.freemem(),
         ram_used: os.totalmem() - os.freemem(),
         disk_used: diskBytes,
-        disk_total: 20 * 1024 * 1024 * 1024 // 20GB Límite Visual
+        disk_total: 20 * 1024 * 1024 * 1024 
     });
 }
 
@@ -106,7 +103,6 @@ function sendStats(cpuPercent, diskBytes, res) {
 //                 RUTAS API
 // ==========================================
 
-// --- API RED ---
 app.get('/api/network', (req, res) => {
     let port = 25565; let customDomain = null;
     try {
@@ -122,13 +118,12 @@ app.get('/api/network', (req, res) => {
     res.json({ ip: getServerIP(), port: port, custom_domain: customDomain });
 });
 
-// --- INFO ---
 app.get('/api/info', (req, res) => {
     try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')); res.json({ version: pkg.version }); } 
     catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- ACTUALIZADOR ---
+// --- ACTUALIZADOR (CHECK) ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -138,7 +133,6 @@ app.get('/api/update/check', async (req, res) => {
             const content = Buffer.from(remoteResponse.content, 'base64').toString();
             remotePkg = JSON.parse(content);
         } catch (apiError) {
-            console.warn("GitHub API limit hit, switching to RAW:", apiError.message);
             remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
         }
         
@@ -150,7 +144,7 @@ app.get('/api/update/check', async (req, res) => {
         let hasChanges = false;
         for (const f of files) {
             try {
-                // FIX: responseType text para evitar errores de parseo y falsos negativos
+                // IMPORTANTE: responseType text para comparar correctamente
                 const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
@@ -164,6 +158,7 @@ app.get('/api/update/check', async (req, res) => {
     } catch (e) { console.error(e.message); res.json({ type: 'error' }); }
 });
 
+// --- ACTUALIZADOR (PERFORM) - AQUÍ ESTABA EL PROBLEMA ---
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     if (type === 'hard') {
@@ -181,10 +176,11 @@ app.post('/api/update/perform', async (req, res) => {
         try {
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
             for (const f of files) {
-                // FIX CRÍTICO: Forzar descarga como texto
+                // FIX CRÍTICO: { responseType: 'text' } ASEGURA QUE SE BAJE COMO TEXTO PLANO
                 const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
                 fs.writeFileSync(path.join(__dirname, f), c);
             }
+            
             async function dl(u, p) { const r = await axios({url:u, method:'GET', responseType:'stream'}); await pipeline(r.data, fs.createWriteStream(p)); }
             try { await dl(`${REPO_RAW}/public/logo.svg`, path.join(__dirname, 'public/logo.svg')); } catch(e){}
             try { await dl(`${REPO_RAW}/public/logo.ico`, path.join(__dirname, 'public/logo.ico')); } catch(e){}
