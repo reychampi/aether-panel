@@ -135,6 +135,6 @@ sed -i 's/\r$//' *.sh
 ---
 
 <div align="center">
-Desarrollado por <strong>ReyChampi</strong>  
+Desarrollado por <strong>Femby08</strong>  
 ¿Encontraste un error? Abre un Issue.
 </div>
