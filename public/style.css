@@ -1,9 +1,5 @@
 :root {
     /* --- PALETA BASE --- */
-    --p: #8b5cf6;
-    --p-light: #a78bfa;
-    --p-dark: #7c3aed;
-    --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
     
@@ -551,4 +547,5 @@ input:checked + .slider:before { transform: translateX(22px); }
     .stats-grid { grid-template-columns: 1fr; }
     .console-box { height: 60vh; }
 }
+
 
