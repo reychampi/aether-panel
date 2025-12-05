@@ -27,8 +27,14 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-// --- MIDDLEWARE ---
-app.use(express.static(path.join(__dirname, 'public')));
+// --- MIDDLEWARE & CACHE CONTROL (FIX: Obliga al navegador a ver los cambios) ---
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: function (res, path) {
+        res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
+    }
+}));
 app.use(express.json());
 
 // --- GESTOR MINECRAFT ---
@@ -71,7 +77,7 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// 3. Enviar Estadísticas (Función Corregida y Separada)
+// 3. Enviar Estadísticas
 function sendStats(cpuPercent, diskBytes, res) {
     const cpus = os.cpus();
     let cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
@@ -144,11 +150,12 @@ app.get('/api/update/check', async (req, res) => {
         let hasChanges = false;
         for (const f of files) {
             try {
-                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
+                // FIX: responseType text para evitar errores de parseo y falsos negativos
+                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
                     const localContent = fs.readFileSync(localPath, 'utf8');
-                    if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) { hasChanges = true; break; }
+                    if (remoteContent !== localContent) { hasChanges = true; break; }
                 }
             } catch(e) {}
         }
@@ -165,7 +172,6 @@ app.post('/api/update/perform', async (req, res) => {
             updater.unref();
         } else {
             io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema...' });
-            // Systemd-run para evitar muerte prematura
             const updater = spawn('systemd-run', ['--unit=aether-update-'+Date.now(), '/bin/bash', '/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
             updater.unref();
         }
@@ -175,12 +181,14 @@ app.post('/api/update/perform', async (req, res) => {
         try {
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
             for (const f of files) {
-                const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
-                fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
+                // FIX CRÍTICO: Forzar descarga como texto
+                const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
+                fs.writeFileSync(path.join(__dirname, f), c);
             }
             async function dl(u, p) { const r = await axios({url:u, method:'GET', responseType:'stream'}); await pipeline(r.data, fs.createWriteStream(p)); }
             try { await dl(`${REPO_RAW}/public/logo.svg`, path.join(__dirname, 'public/logo.svg')); } catch(e){}
             try { await dl(`${REPO_RAW}/public/logo.ico`, path.join(__dirname, 'public/logo.ico')); } catch(e){}
+            
             res.json({ success: true, mode: 'soft' });
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
@@ -244,7 +252,7 @@ app.post('/api/mods/install', async (req, res) => {
     } catch(e) { res.json({ success: false }); }
 });
 
-// --- MONITOR (Llamada a función separada) ---
+// --- MONITOR ---
 app.get('/api/stats', (req, res) => {
     osUtils.cpuUsage((cpuPercent) => {
         let diskBytes = 0;
