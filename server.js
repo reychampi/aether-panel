@@ -34,14 +34,15 @@ app.use(express.json());
 // --- GESTOR MINECRAFT ---
 const mcServer = new MCManager(io);
 
-// --- CLIENTE API GITHUB [UPDATED] ---
+// --- CLIENTE API GITHUB [CONFIGURACIÓN] ---
 const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.6.0' }, timeout: 10000 });
-// [CHANGE] Updated Repo URLs
+// REPOSITORIO CONFIGURADO: femby08/aether-panel
 const REPO_OWNER = 'femby08';
 const REPO_NAME = 'aether-panel';
-const REPO_RAW = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main`;
-const GH_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/package.json?ref=main`;
-const REPO_ZIP = `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/main.zip`;
+const BRANCH = 'main';
+const REPO_RAW = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}`;
+const GH_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/package.json?ref=${BRANCH}`;
+const REPO_ZIP = `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${BRANCH}.zip`;
 
 // --- UTILIDADES ---
 
@@ -125,7 +126,7 @@ app.get('/api/info', (req, res) => {
     catch (e) { res.json({ version: 'Unknown' }); }
 });
 
-// --- ACTUALIZADOR ---
+// --- ACTUALIZADOR (CORE LOGIC) ---
 app.get('/api/update/check', async (req, res) => {
     try {
         const localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -136,13 +137,16 @@ app.get('/api/update/check', async (req, res) => {
             remotePkg = JSON.parse(content);
         } catch (apiError) {
             console.warn("GitHub API limit hit, switching to RAW:", apiError.message);
+            // Fallback a RAW con timestamp para evitar caché de GitHub
             remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
         }
         
+        // Si hay cambio de versión -> HARD UPDATE
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: IS_WIN ? 'manual' : 'hard', local: localPkg.version, remote: remotePkg.version });
         }
 
+        // Si la versión es igual, comprobamos cambios visuales (Soft Check)
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
         for (const f of files) {
@@ -151,72 +155,89 @@ app.get('/api/update/check', async (req, res) => {
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
                     const localContent = fs.readFileSync(localPath, 'utf8');
+                    // Comprobación simple de contenido
                     if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) { hasChanges = true; break; }
                 }
             } catch(e) {}
         }
         if (hasChanges) return res.json({ type: 'soft', local: localPkg.version, remote: remotePkg.version });
         res.json({ type: 'none' });
-    } catch (e) { console.error(e.message); res.json({ type: 'error' }); }
+    } catch (e) { console.error("Update Check Error:", e.message); res.json({ type: 'error' }); }
 });
 
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     
-    // --- HARD UPDATE ---
+    // --- HARD UPDATE (Reinicia el servicio) ---
     if (type === 'hard') {
         if(IS_WIN) {
             const updater = spawn('cmd.exe', ['/c', 'start', 'updater.bat'], { detached: true, stdio: 'ignore' });
             updater.unref();
         } else {
-            io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema completo...' });
+            io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema (Reinicio requerido)...' });
             const updater = spawn('systemd-run', ['--unit=aether-update-'+Date.now(), '/bin/bash', '/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
             updater.unref();
         }
         res.json({ success: true, mode: 'hard' });
 
-    // --- SOFT UPDATE [MEJORADO] ---
+    // --- SOFT UPDATE (Sin reinicio) ---
     } else if (type === 'soft') {
-        io.emit('toast', { type: 'info', msg: '🎨 Actualizando interfaz (Hot Swap)...' });
+        io.emit('toast', { type: 'info', msg: '🎨 Descargando interfaz...' });
         
         try {
-            // METODO ROBUSTO (LINUX): Descargar ZIP completo y extraer /public
             if (!IS_WIN) {
-                // Descarga ZIP -> Unzip en tmp -> Mueve public -> Limpia
-                // Esto asegura que se traigan TODOS los archivos nuevos (imágenes, fonts, etc.)
-                const cmd = `
-                    mkdir -p /tmp/aether_soft && \
-                    wget -q "${REPO_ZIP}" -O /tmp/aether_soft/update.zip && \
-                    unzip -q -o /tmp/aether_soft/update.zip -d /tmp/aether_soft/extracted && \
-                    cp -rf /tmp/aether_soft/extracted/*/public/* "${path.join(__dirname, 'public')}" && \
-                    rm -rf /tmp/aether_soft
+                // SCRIPT ROBUSTO DE ACTUALIZACIÓN VISUAL
+                // 1. Usa curl o wget. 2. Descomprime. 3. Busca la carpeta correcta. 4. Copia.
+                const script = `
+                    rm -rf /tmp/aup_temp
+                    mkdir -p /tmp/aup_temp
+                    
+                    echo "Descargando..."
+                    curl -L -f -s "${REPO_ZIP}" -o /tmp/aup_temp/update.zip || wget -q "${REPO_ZIP}" -O /tmp/aup_temp/update.zip
+                    
+                    if [ ! -f /tmp/aup_temp/update.zip ]; then echo "Error: Fallo descarga ZIP"; exit 1; fi
+                    
+                    echo "Descomprimiendo..."
+                    unzip -q -o /tmp/aup_temp/update.zip -d /tmp/aup_temp/extract
+                    
+                    # Detectar carpeta interna (ej: aether-panel-main) dinámicamente
+                    DIR=$(ls /tmp/aup_temp/extract | head -n 1)
+                    SOURCE="/tmp/aup_temp/extract/$DIR/public"
+                    
+                    if [ ! -d "$SOURCE" ]; then echo "Error: Carpeta public no encontrada en $DIR"; exit 1; fi
+                    
+                    echo "Aplicando cambios..."
+                    cp -rf "$SOURCE/"* "${path.join(__dirname, 'public')}/"
+                    rm -rf /tmp/aup_temp
+                    echo "Success"
                 `;
                 
-                exec(cmd, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error("Soft Update Exec Error:", stderr);
-                        throw error;
+                exec(script, (error, stdout, stderr) => {
+                    if (error || stderr.includes('Error:')) {
+                        console.error("Soft Update Failed:", stderr || stdout);
+                        io.emit('toast', { type: 'error', msg: '❌ Error al actualizar. Revisa logs.' });
+                    } else {
+                        console.log("Soft Update Success:", stdout);
+                        io.emit('toast', { type: 'success', msg: '✅ Interfaz actualizada. Recargando...' });
                     }
-                    res.json({ success: true, mode: 'soft' });
+                    res.json({ success: !error, mode: 'soft' });
                 });
 
-            // FALLBACK (WINDOWS / NODE PURO): Método antiguo archivo por archivo
             } else {
+                // Fallback Windows (Archivo por archivo)
                 const files = ['public/index.html', 'public/style.css', 'public/app.js'];
                 for (const f of files) {
                     const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
                     fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
                 }
-                // Intentar descargar assets extra comunes
                 async function dl(u, p) { try { const r = await axios({url:u, method:'GET', responseType:'stream'}); await pipeline(r.data, fs.createWriteStream(p)); } catch(e){} }
                 await dl(`${REPO_RAW}/public/logo.svg`, path.join(__dirname, 'public/logo.svg'));
                 await dl(`${REPO_RAW}/public/logo.ico`, path.join(__dirname, 'public/logo.ico'));
-                
                 res.json({ success: true, mode: 'soft' });
             }
 
         } catch (e) { 
-            console.error("Soft update failed:", e);
+            console.error("Soft update exception:", e);
             res.status(500).json({ error: e.message }); 
         }
     }
