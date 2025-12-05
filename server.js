@@ -27,15 +27,8 @@ const BACKUP_DIR = path.join(__dirname, 'backups');
 if (!fs.existsSync(SERVER_DIR)) fs.mkdirSync(SERVER_DIR, { recursive: true });
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-// --- MIDDLEWARE & CACHE CONTROL (FIX: Evita caché antigua en updates) ---
-app.use(express.static(path.join(__dirname, 'public'), {
-    setHeaders: function (res, path) {
-        // Obliga al navegador a no guardar caché de los archivos estáticos para ver cambios al instante
-        res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-        res.set("Pragma", "no-cache");
-        res.set("Expires", "0");
-    }
-}));
+// --- MIDDLEWARE ---
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // --- GESTOR MINECRAFT ---
@@ -78,7 +71,7 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// 3. Enviar Estadísticas
+// 3. Enviar Estadísticas (Función Corregida y Separada)
 function sendStats(cpuPercent, diskBytes, res) {
     const cpus = os.cpus();
     let cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
@@ -151,13 +144,11 @@ app.get('/api/update/check', async (req, res) => {
         let hasChanges = false;
         for (const f of files) {
             try {
-                // FIX: responseType text para evitar errores de parseo
-                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
+                const remoteContent = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
                     const localContent = fs.readFileSync(localPath, 'utf8');
-                    // Comparación simple de string
-                    if (remoteContent !== localContent) { hasChanges = true; break; }
+                    if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) { hasChanges = true; break; }
                 }
             } catch(e) {}
         }
@@ -174,6 +165,7 @@ app.post('/api/update/perform', async (req, res) => {
             updater.unref();
         } else {
             io.emit('toast', { type: 'warning', msg: '🔄 Actualizando sistema...' });
+            // Systemd-run para evitar muerte prematura
             const updater = spawn('systemd-run', ['--unit=aether-update-'+Date.now(), '/bin/bash', '/opt/aetherpanel/updater.sh'], { detached: true, stdio: 'ignore' });
             updater.unref();
         }
@@ -183,15 +175,12 @@ app.post('/api/update/perform', async (req, res) => {
         try {
             const files = ['public/index.html', 'public/style.css', 'public/app.js'];
             for (const f of files) {
-                // FIX: Forzar descarga como texto para evitar errores de parseo
-                const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`, { responseType: 'text' })).data;
-                fs.writeFileSync(path.join(__dirname, f), c);
+                const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
+                fs.writeFileSync(path.join(__dirname, f), typeof c === 'string' ? c : JSON.stringify(c));
             }
-            // Descarga de recursos binarios (imágenes)
             async function dl(u, p) { const r = await axios({url:u, method:'GET', responseType:'stream'}); await pipeline(r.data, fs.createWriteStream(p)); }
             try { await dl(`${REPO_RAW}/public/logo.svg`, path.join(__dirname, 'public/logo.svg')); } catch(e){}
             try { await dl(`${REPO_RAW}/public/logo.ico`, path.join(__dirname, 'public/logo.ico')); } catch(e){}
-            
             res.json({ success: true, mode: 'soft' });
         } catch (e) { res.status(500).json({ error: e.message }); }
     }
@@ -255,7 +244,7 @@ app.post('/api/mods/install', async (req, res) => {
     } catch(e) { res.json({ success: false }); }
 });
 
-// --- MONITOR ---
+// --- MONITOR (Llamada a función separada) ---
 app.get('/api/stats', (req, res) => {
     osUtils.cpuUsage((cpuPercent) => {
         let diskBytes = 0;
