@@ -1,195 +1,324 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark" data-design="glass">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aether Panel v1.6.1</title>
-    
-    <!-- FUENTES -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- ICONOS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- LIBRERIAS EXTERNAS (Charts, Terminal, Notificaciones) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-    <script src="/socket.io/socket.io.js"></script> <!-- Socket.io simulado -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aether Panel</title>
 
-    <!-- ESTILOS PROPIOS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
     <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
 <body>
 
+    <div class="background-layer">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
+
+    <div id="detail-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card detail-card-size">
+            <div class="modal-header">
+                <h3 id="detail-title" style="display:flex; align-items:center; gap:10px; font-size: 1.2rem;">Detalles</h3>
+                <button class="btn btn-icon-sm" onclick="closeAllModals()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="detail-body" class="modal-body" style="display:flex; flex-direction:column; height:100%; padding: 0;">
+                </div>
+        </div>
+    </div>
+
+    <div id="appearance-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-app">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-title-app"><i class="fa-solid fa-paintbrush"></i> Personalización</h3>
+                <button class="btn btn-icon-sm" onclick="closeAllModals()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body settings-layout">
+                
+                <div class="settings-card">
+                    <div class="card-subtitle">Apariencia</div>
+                    <div class="setting-row">
+                        <span>Tema</span>
+                        <div class="segment-box" role="group">
+                            <button id="theme-btn-light" onclick="setTheme('light')" class="seg-btn" aria-label="Claro"><i class="fa-solid fa-sun"></i></button>
+                            <button id="theme-btn-dark" onclick="setTheme('dark')" class="seg-btn active" aria-label="Oscuro"><i class="fa-solid fa-moon"></i></button>
+                            <button id="theme-btn-auto" onclick="setTheme('auto')" class="seg-btn" aria-label="Auto">Auto</button>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <span>Diseño</span>
+                        <div class="segment-box" role="group">
+                            <button onclick="setDesign('glass')" id="modal-btn-glass" class="seg-btn active">Glass</button>
+                            <button onclick="setDesign('material')" id="modal-btn-material" class="seg-btn">Flat</button>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <span>Acento</span>
+                        <div class="color-row">
+                            <input type="color" id="accent-picker" onchange="setAccentColor(this.value)" aria-label="Color acento">
+                            <button id="accent-mode-auto" onclick="setAccentMode('auto')" class="seg-btn active" style="font-size:0.75rem">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="card-subtitle" style="color:var(--warning)">Mantenimiento</div>
+                    <div class="actions-grid">
+                        <button onclick="checkUpdate()" class="maint-btn">
+                            <div class="icon-box"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                            <div class="maint-info"><span>Actualizar</span><small>Buscar versión</small></div>
+                        </button>
+                        <button onclick="forceUIUpdate()" class="maint-btn">
+                            <div class="icon-box warn"><i class="fa-solid fa-rotate"></i></div>
+                            <div class="maint-info"><span>Recargar UI</span><small>Reparar fallos</small></div>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="version-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card" style="max-width: 800px; max-height: 85vh;">
+            <div class="modal-header"><h3 id="modal-title">Título</h3><button class="btn btn-icon-sm" onclick="closeAllModals()"><i class="fa-solid fa-xmark"></i></button></div>
+            <div id="modal-body" class="modal-body"></div>
+        </div>
+    </div>
+    <div id="update-modal" class="modal-overlay" role="alertdialog" aria-modal="true">
+        <div class="modal-card" style="max-width: 400px; text-align: center;">
+            <div class="modal-body">
+                <div style="font-size: 3rem; margin-bottom: 15px;">🚀</div>
+                <h3 style="margin-bottom: 10px;">Actualización Disponible</h3>
+                <p id="update-text" style="color: var(--text-muted); margin-bottom: 25px;"></p>
+                <div id="up-actions" style="display: flex; gap: 10px; justify-content: center;"></div>
+            </div>
+        </div>
+    </div>
+    <div id="force-ui-modal" class="modal-overlay" role="alertdialog" aria-modal="true">
+        <div class="modal-card" style="max-width: 350px;">
+            <div class="modal-header"><h3>Recargar UI</h3></div>
+            <div class="modal-body">
+                <p style="color:var(--text-muted); margin-bottom:20px;">¿Redescargar interfaz?</p>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeAllModals()">No</button>
+                    <button class="btn btn-primary" onclick="confirmForceUI()">Sí</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="app-layout">
-        
-        <!-- BARRA LATERAL -->
-        <aside class="sidebar">
-            <div class="brand">
-                <div class="brand-logo"><i class="fa-solid fa-planet-ringed" style="color:white"></i></div>
-                <div class="brand-name">AETHER</div>
+        <aside class="sidebar glass-panel">
+            <div class="brand-area">
+                <div class="logo-box"><i class="fa-solid fa-bolt"></i></div>
+                <div class="logo-text"><span class="title">Aether</span><span class="subtitle" id="version-display">Cargando...</span></div>
             </div>
-
-            <div class="nav-section">
-                <div class="nav-label">Core</div>
-                <button class="nav-btn active" id="nav-stats">
-                    <i class="fa-solid fa-chart-line"></i> <span>Monitor</span>
-                </button>
-                <button class="nav-btn" id="nav-console">
-                    <i class="fa-solid fa-terminal"></i> <span>Consola</span>
-                </button>
-            </div>
-
-            <div class="nav-section">
-                <div class="nav-label">Sistema</div>
-                <button class="nav-btn" id="nav-versions">
-                    <i class="fa-solid fa-layer-group"></i> <span>Núcleos</span>
-                </button>
-                <button class="nav-btn" id="nav-labs">
-                    <i class="fa-solid fa-flask"></i> <span>Labs</span>
-                </button>
-                <button class="nav-btn" id="nav-config">
-                    <i class="fa-solid fa-sliders"></i> <span>Ajustes</span>
-                </button>
-            </div>
+            
+            <nav class="nav-menu" id="main-nav" role="tablist">
+                <div class="nav-label">CONTROL</div>
+                <button onclick="setTab('stats', this)" class="nav-item active" role="tab" aria-selected="true" aria-controls="tab-stats" id="nav-stats" title="Monitor" tabindex="0"><i class="fa-solid fa-chart-pie"></i><span>Monitor</span></button>
+                <button onclick="setTab('console', this)" class="nav-item" role="tab" aria-selected="false" aria-controls="tab-console" id="nav-console" title="Consola" tabindex="0"><i class="fa-solid fa-terminal"></i><span>Consola</span></button>
+                <button onclick="setTab('versions', this)" class="nav-item" role="tab" aria-selected="false" aria-controls="tab-versions" id="nav-versions" title="Versiones" tabindex="0"><i class="fa-solid fa-layer-group"></i><span>Versiones</span></button>
+                
+                <div class="nav-label">SISTEMA</div>
+                <button onclick="setTab('labs', this)" class="nav-item" role="tab" aria-selected="false" aria-controls="tab-labs" id="nav-labs" title="Labs" tabindex="0"><i class="fa-solid fa-flask"></i><span>Labs</span></button>
+                <button onclick="setTab('whitelist', this)" class="nav-item" role="tab" aria-selected="false" aria-controls="tab-whitelist" id="nav-whitelist" title="Whitelist" tabindex="0"><i class="fa-solid fa-address-book"></i><span>Whitelist</span></button>
+                
+                <button onclick="setTab('config', this)" class="nav-item" role="tab" aria-selected="false" aria-controls="tab-config" id="nav-config" title="Ajustes" tabindex="0"><i class="fa-solid fa-sliders"></i><span>Ajustes</span></button>
+            </nav>
 
             <div class="sidebar-footer">
-                <div class="user-avatar" style="background: url('https://minotar.net/helm/Steve/32.png'); background-size:cover;"></div>
-                <div class="user-info">
-                    <span class="user-name">Administrador</span>
-                    <span class="user-role">Acceso Root</span>
+                <button class="btn btn-secondary" onclick="document.getElementById('appearance-modal').classList.add('active'); document.querySelector('#appearance-modal .btn-icon-sm').focus();" style="width:100%; justify-content:center; margin-bottom:15px;">
+                    <i class="fa-solid fa-palette"></i> Personalizar
+                </button>
+                <div class="user-card">
+                    <div id="status-dot" class="status-dot offline"></div>
+                    <div class="user-info">
+                        <div id="status-text" class="status-text-main">OFFLINE</div>
+                        <div class="status-label">Estado</div>
+                    </div>
                 </div>
             </div>
         </aside>
 
-        <!-- CONTENIDO PRINCIPAL -->
-        <main>
-            <!-- CABECERA FLOTANTE -->
-            <header>
-                <div class="server-title">
-                    <h1>Panel de Control</h1>
-                    <div class="server-subtitle">
-                        <div class="status-widget">
-                            <div class="status-indicator"></div>
-                            <span class="status-text">OFFLINE</span>
-                        </div>
-                        <span style="opacity:0.5">•</span>
-                        <span style="font-family:'JetBrains Mono'">192.168.1.50:25565</span>
-                    </div>
+        <main class="main-content">
+            <header class="top-bar">
+                <div>
+                    <h1 style="font-weight:800; font-size:1.8rem; margin-bottom:5px">Panel de Control</h1>
+                    <div class="server-badge" onclick="copyIP()" role="button" tabindex="0" aria-label="Copiar IP"><i class="fa-solid fa-wifi"></i> <span id="ip-display">Localhost</span></div>
                 </div>
-                <button class="btn btn-primary btn-customize" id="btn-personalizar">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Personalizar
-                </button>
+                <div class="header-actions">
+                    <button onclick="api('power/start')" class="action-btn start" aria-label="Iniciar"><i class="fa-solid fa-play"></i></button>
+                    <button onclick="api('power/restart')" class="action-btn restart" aria-label="Reiniciar"><i class="fa-solid fa-rotate"></i></button>
+                    <button onclick="api('power/stop')" class="action-btn stop" aria-label="Detener"><i class="fa-solid fa-stop"></i></button>
+                    <button onclick="api('power/kill')" class="action-btn" style="background:#374151" aria-label="Forzar"><i class="fa-solid fa-skull"></i></button>
+                </div>
             </header>
 
-            <!-- VISTA 1: MONITOR (STATS) -->
-            <div id="tab-stats" class="tab-content active">
-                
-                <!-- BOTONES DE PODER -->
-                <div class="power-controls">
-                    <div class="power-btn btn-start" id="btn-start">
-                        <i class="fa-solid fa-play"></i>
-                        <span>INICIAR</span>
-                    </div>
-                    <div class="power-btn btn-restart" id="btn-restart">
-                        <i class="fa-solid fa-rotate"></i>
-                        <span>REINICIAR</span>
-                    </div>
-                    <div class="power-btn btn-stop" id="btn-stop">
-                        <i class="fa-solid fa-stop"></i>
-                        <span>DETENER</span>
-                    </div>
-                    <div class="power-btn btn-kill" id="btn-kill">
-                        <i class="fa-solid fa-skull"></i>
-                        <span>KILL</span>
-                    </div>
-                </div>
-
-                <!-- TARJETAS DE ESTADISTICAS -->
+            <div id="tab-stats" class="tab-view active" role="tabpanel" aria-labelledby="nav-stats">
                 <div class="stats-grid">
-                    <!-- CPU CARD -->
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-title"><i class="fa-solid fa-microchip"></i> CPU</span>
-                        </div>
-                        <div class="stat-big">0%</div>
-                        <p class="stat-sub">Frecuencia: 0 GHz</p>
-                        <div class="chart-container">
-                            <canvas id="cpu-chart"></canvas>
-                        </div>
+                    <div class="card glass-panel interactive" tabindex="0" onclick="openDetail('cpu')">
+                        <div class="card-title">CPU <i class="fa-solid fa-microchip"></i></div>
+                        <div><span class="big-number" id="cpu-val">0%</span></div>
+                        <div class="chart-container"><canvas id="cpu-chart"></canvas></div>
+                        <div class="click-hint">Ver Detalles</div>
                     </div>
-
-                    <!-- RAM CARD -->
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-title"><i class="fa-solid fa-memory"></i> RAM</span>
-                        </div>
-                        <div class="stat-big">0 GB</div>
-                        <p class="stat-sub">Libre: 0 GB</p>
-                        <div class="chart-container">
-                            <canvas id="ram-chart"></canvas>
-                        </div>
+                    <div class="card glass-panel interactive" tabindex="0" onclick="openDetail('ram')">
+                        <div class="card-title">RAM <i class="fa-solid fa-memory"></i></div>
+                        <div><span class="big-number" id="ram-val">0 GB</span><div style="font-size:0.9rem; color:var(--text-muted)" id="ram-max">de 4 GB</div></div>
+                        <div class="chart-container"><canvas id="ram-chart"></canvas></div>
+                        <div class="click-hint">Ver Detalles</div>
                     </div>
+                    <div class="card glass-panel interactive" tabindex="0" onclick="openDetail('disk')">
+                        <div class="card-title">DISCO <i class="fa-solid fa-hard-drive"></i></div>
+                        <div><span class="big-number" id="disk-val">0 MB</span><div style="font-size:0.9rem; color:var(--text-muted)">Usado</div></div>
+                        <div class="progress-bar-bg"><div id="disk-bar" class="progress-bar-fill warning" style="width:0%"></div></div>
+                        <div class="click-hint">Ver Detalles</div>
+                    </div>
+                    <div class="card glass-panel interactive" tabindex="0" onclick="openDetail('players')">
+                        <div class="card-title">JUGADORES <i class="fa-solid fa-users"></i></div>
+                        <div>
+                            <span class="big-number" id="players-val">0/0</span>
+                            <div style="font-size:0.9rem; color:var(--text-muted)">En línea</div>
+                        </div>
+                        <div id="players-preview" class="avatar-stack" style="pointer-events: none;">
+                            </div>
+                        <div class="click-hint">Ver Lista</div>
+                    </div>
+                </div>
 
-                    <!-- DISK CARD -->
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-title"><i class="fa-solid fa-hard-drive"></i> DISCO</span>
+                <h3 style="margin-bottom: 15px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-size: 0.9rem;">Actividad Reciente</h3>
+                <div class="glass-panel interactive" style="overflow: hidden; cursor:pointer" onclick="openDetail('activity')">
+                    <table class="activity-table">
+                        <thead>
+                            <tr><th>Evento</th><th>Usuario</th><th>Hora</th><th style="text-align: right;">Estado</th></tr>
+                        </thead>
+                        <tbody id="activity-table-body">
+                            </tbody>
+                    </table>
+                    <div class="click-hint-bottom">Click para ver historial completo</div>
+                </div>
+            </div>
+
+            <div id="tab-console" class="tab-view" role="tabpanel" aria-labelledby="nav-console">
+                <div class="console-full glass-panel">
+                    <div class="console-header"><span><i class="fa-solid fa-terminal"></i> root@server:~</span><span style="font-size:0.7rem; opacity:0.5">BASH</span></div>
+                    <div id="terminal" class="console-output" tabindex="0" aria-label="Terminal"></div>
+                </div>
+            </div>
+
+            <div id="tab-versions" class="tab-view" role="tabpanel" aria-labelledby="nav-versions">
+                <h2 style="margin-bottom:20px; font-weight:700">Selector de Software</h2>
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+                    <div class="glass-panel ver-card vanilla" onclick="loadVersions('vanilla')" role="button" tabindex="0"><i class="fa-solid fa-cube"></i><h3>Vanilla</h3><p>Oficial</p></div>
+                    <div class="glass-panel ver-card paper" onclick="loadVersions('paper')" role="button" tabindex="0"><i class="fa-solid fa-paper-plane"></i><h3>Paper</h3><p>Optimizado</p></div>
+                    <div class="glass-panel ver-card fabric" onclick="loadVersions('fabric')" role="button" tabindex="0"><i class="fa-solid fa-scroll"></i><h3>Fabric</h3><p>Mods Ligeros</p></div>
+                    <div class="glass-panel ver-card forge" onclick="loadVersions('forge')" role="button" tabindex="0"><i class="fa-solid fa-hammer"></i><h3>Forge</h3><p>Mods Clásicos</p></div>
+                </div>
+            </div>
+
+            <div id="tab-labs" class="tab-view" role="tabpanel" aria-labelledby="nav-labs">
+                <h2 style="margin-bottom:20px; font-weight:800">Aether Labs</h2>
+                <div class="labs-grid">
+                    <div class="mod-card-modern lab-purple">
+                        <span class="lab-tag new">NEW</span><div class="mod-cover"><i class="fa-solid fa-store"></i></div>
+                        <div class="mod-body"><div class="mod-title">Tienda Mods</div><p class="mod-desc">Instala plugins y mods.</p><button class="btn-install" onclick="openModStore()">Abrir</button></div>
+                    </div>
+                    <div class="mod-card-modern lab-orange">
+                        <span class="lab-tag alpha">ALPHA</span><div class="mod-cover"><i class="fa-solid fa-folder-tree"></i></div>
+                        <div class="mod-body"><div class="mod-title">Archivos</div><p class="mod-desc">Explorador web.</p><button class="btn-install" onclick="setTab('files')">Abrir</button></div>
+                    </div>
+                    <div class="mod-card-modern lab-blue">
+                        <span class="lab-tag beta">BETA</span><div class="mod-cover"><i class="fa-solid fa-box-archive"></i></div>
+                        <div class="mod-body"><div class="mod-title">Backups</div><p class="mod-desc">Copias seguridad.</p><button class="btn-install" onclick="setTab('backups')">Gestionar</button></div>
+                    </div>
+                    <div class="mod-card-modern lab-teal">
+                        <span class="lab-tag beta">BETA</span><div class="mod-cover"><i class="fa-solid fa-bolt"></i></div>
+                        <div class="mod-body"><div class="mod-title">Modo Turbo</div><p class="mod-desc">Optimización CPU.</p>
+                            <div class="switch-container"><span class="switch-label">ESTADO</span><label class="toggle-switch"><input type="checkbox" id="lab-turbo"><span class="slider"></span></label></div>
                         </div>
-                        <div class="stat-big">45%</div>
-                        <div style="margin-top:auto; height:10px; width:100%; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                            <div style="width:45%; height:100%; background:var(--p);"></div>
-                        </div>
-                        <p class="stat-sub" style="margin-top:10px">12GB / 25GB Usado</p>
                     </div>
                 </div>
             </div>
 
-            <!-- VISTA 2: CONSOLA -->
-            <div id="tab-console" class="tab-content">
-                <div class="console-container">
-                    <div class="console-header">
-                        <div class="dot red"></div>
-                        <div class="dot yellow"></div>
-                        <div class="dot green"></div>
-                        <span style="font-size:0.8rem; color:#666; margin-left:10px">root@server:~</span>
+            <div id="tab-whitelist" class="tab-view" role="tabpanel" aria-labelledby="nav-whitelist">
+                <div class="glass-panel" style="padding: 30px; min-height: 500px; display: flex; flex-direction: column;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                        <div>
+                            <h2 style="font-weight: 800; display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Whitelist
+                            </h2>
+                            <p style="color: var(--text-muted); margin-top: 5px; font-size: 0.9rem;">Gestiona quién tiene acceso a tu servidor.</p>
+                        </div>
+                        
+                        <div class="switch-container" style="background: rgba(0,0,0,0.2); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.05);">
+                            <span class="switch-label" style="font-size: 0.8rem; margin-right: 10px; font-weight: 700; color: var(--text-muted);">ESTADO</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="whitelist-toggle" onchange="toggleWhitelistState(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
                     </div>
-                    <div id="terminal"></div>
-                    <div class="console-input-wrapper">
-                        <i class="fa-solid fa-chevron-right" style="color:var(--success); font-size:0.8rem; margin-right:10px"></i>
-                        <input type="text" id="console-input" placeholder="Escribe un comando...">
+
+                    <div class="whitelist-input-area">
+                        <div class="input-wrapper">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <input type="text" id="whitelist-input" placeholder="Nombre de usuario de Minecraft..." onkeypress="handleWhitelistKey(event)">
+                        </div>
+                        <button class="btn btn-primary" onclick="addWhitelistUser()">Añadir</button>
+                    </div>
+
+                    <div id="whitelist-grid" class="whitelist-grid">
+                        </div>
+
+                    <div id="whitelist-empty" style="display: none; flex: 1; flex-direction: column; align-items: center; justify-content: center; opacity: 0.5;">
+                        <i class="fa-solid fa-ghost" style="font-size: 3rem; margin-bottom: 10px;"></i>
+                        <p>La lista blanca está vacía.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- VISTA 3: AJUSTES (CONFIG) -->
-            <div id="tab-config" class="tab-content">
-                <!-- El contenido se inyecta desde app.js (renderNewConfigLayout) -->
-                <div id="cfg-list" style="height:100%"></div>
+            <div id="tab-files" class="tab-view" role="tabpanel">
+                <div class="glass-panel" style="min-height:500px; display: flex; flex-direction: column;">
+                    <div style="padding:20px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items: center;">
+                        <div><button onclick="setTab('labs')" class="btn btn-secondary" style="margin-right:10px"><i class="fa-solid fa-arrow-left"></i></button><span id="breadcrumb" style="font-family:monospace; color:var(--text-muted); font-weight: 600;">/home/container</span></div>
+                        <button class="btn btn-primary" onclick="uploadFile()"><i class="fa-solid fa-upload"></i> Subir</button>
+                    </div>
+                    <div id="file-list" style="padding: 10px;"><p style="color:gray; padding:20px; text-align:center">Simulación: Sin conexión.</p></div>
+                </div>
             </div>
-            
-            <!-- VISTAS PLACEHOLDER -->
-            <div id="tab-versions" class="tab-content" style="align-items:center; justify-content:center; opacity:0.5">
-                <i class="fa-solid fa-box-open" style="font-size:3rem; margin-bottom:20px"></i>
-                <h2>Gestor de Versiones</h2>
-                <p>Próximamente</p>
+            <div id="tab-backups" class="tab-view" role="tabpanel">
+                <div class="glass-panel">
+                    <div style="padding:20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;"><h3 style="margin:0"><i class="fa-solid fa-box-archive"></i> Backups</h3><button class="btn btn-primary" onclick="createBackup()">Crear Nuevo</button></div>
+                    <button onclick="setTab('labs')" class="btn btn-secondary" style="margin:20px 0 0 20px"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+                    <div id="backup-list" style="padding: 20px;"></div>
+                </div>
             </div>
-            <div id="tab-labs" class="tab-content" style="align-items:center; justify-content:center; opacity:0.5">
-                <i class="fa-solid fa-flask" style="font-size:3rem; margin-bottom:20px"></i>
-                <h2>Laboratorio Experimental</h2>
-                <p>Próximamente</p>
+            <div id="tab-config" class="tab-view" role="tabpanel" aria-labelledby="nav-config">
+                <div class="glass-panel" style="padding: 24px;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 20px;"><h3>Configuración</h3><button class="btn btn-primary" onclick="saveCfg()">Guardar</button></div>
+                    <div id="cfg-list" class="settings-layout">
+                        </div>
+                </div>
             </div>
 
         </main>
     </div>
-
-    <!-- SCRIPT PRINCIPAL -->
     <script src="app.js"></script>
+    <script>
+        if(typeof io === 'undefined'){
+            window.io = () => ({ on: (e,c)=>{if(e==='status_change')setTimeout(()=>c('ONLINE'),2000)}, emit: ()=>{} });
+        }
+    </script>
 </body>
 </html>
