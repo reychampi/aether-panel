@@ -1,5 +1,5 @@
+/* === ESTILOS CORE === */
 :root {
-    /* --- PALETA BASE --- */
     --p: #8b5cf6;
     --p-light: #a78bfa;
     --p-dark: #7c3aed;
@@ -245,43 +245,6 @@ nav { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px
 [data-design="material"] .nav-btn.active i, [data-theme="light"] .nav-btn.active i { text-shadow: none; }
 
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 14px; padding-top: 20px; border-top: 1px solid var(--glass-border); }
-
-/* --- CONTROLES DE CONFIGURACIÓN (FIXED) --- */
-.control-row { display: flex; gap: 10px; width: 100%; flex-wrap: wrap; }
-.control-group { 
-    background: rgba(0,0,0,0.3); 
-    border: 1px solid var(--glass-border); 
-    padding: 4px; 
-    border-radius: 12px; 
-    display: flex; 
-    flex: 1; 
-    gap: 4px;
-    width: 100%; /* Asegura ancho completo */
-}
-[data-theme="light"] .control-group { background: rgba(255,255,255,0.5); }
-[data-design="material"] .control-group { background: var(--glass-btn); border-radius: 12px; }
-
-.control-btn { 
-    flex: 1; /* Distribuye espacio equitativamente */
-    background: transparent; 
-    border: none; 
-    color: var(--muted); 
-    padding: 10px 14px; /* Más espacio interno */
-    border-radius: 8px; /* Radio consistente */
-    cursor: pointer; 
-    transition: all 0.2s; 
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-    font-size: 0.9rem; 
-    font-weight: 600; 
-    gap: 8px; 
-    white-space: nowrap; /* Evita que el texto se rompa */
-    min-width: 80px; /* Evita que se aplasten */
-}
-.control-btn:hover { color: var(--txt); background: rgba(128,128,128,0.1); }
-.control-btn.active { background: var(--p); color: white; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-[data-design="material"] .control-btn { border-radius: 8px; }
 
 .status-widget { background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 16px; border: 1px solid var(--glass-border); display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.85rem; color: var(--txt); white-space: nowrap; overflow: hidden; backdrop-filter: blur(10px); }
 .status-indicator { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); transition: all 0.3s; flex-shrink: 0; box-shadow: 0 0 10px var(--danger); }
@@ -552,7 +515,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     .console-box { height: 60vh; }
 }
 
-/* === WHITELIST (NUEVO) === */
+/* === WHITELIST SYSTEM === */
 .whitelist-input-container {
     display: flex; gap: 15px; margin-bottom: 30px; background: rgba(0,0,0,0.2); padding: 20px;
     border-radius: 16px; border: 1px solid var(--glass-border);
@@ -597,3 +560,162 @@ input:checked + .slider:before { transform: translateX(22px); }
     transition: 0.2s;
 }
 .btn-wl-remove:hover { background: var(--danger); color: white; }
+
+/* === NEW CUSTOMIZATION MODAL STYLES (MATCHING IMAGE) === */
+
+/* Tarjetas contenedoras (Apariencia / Mantenimiento) */
+.settings-group-card {
+    background: rgba(0, 0, 0, 0.3); /* Fondo oscuro suave */
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+[data-theme="light"] .settings-group-card {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: rgba(0,0,0,0.05);
+}
+
+.settings-group-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    opacity: 0.8;
+}
+
+/* Filas de ajustes (Tema, Diseño...) */
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 40px;
+}
+
+.setting-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--txt);
+}
+
+/* Controles Segmentados (Botones Tema/Diseño) */
+.segment-control {
+    background: #000; /* Fondo negro profundo para el switch */
+    border-radius: 10px;
+    padding: 4px;
+    display: flex;
+    gap: 2px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+[data-theme="light"] .segment-control { background: #e5e7eb; border-color: transparent; }
+
+.seg-item {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+}
+
+.seg-item.text { font-weight: 600; padding: 6px 16px; }
+
+.seg-item:hover { color: var(--txt); }
+
+.seg-item.active {
+    background: var(--p); /* Color primario (Morado) */
+    color: white;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+}
+
+/* Selector de Color Redondo */
+.color-circle-wrapper {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.1);
+    cursor: pointer;
+    position: relative;
+    background: var(--bg);
+}
+
+.color-circle-wrapper input[type="color"] {
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    cursor: pointer;
+    padding: 0; margin: 0;
+}
+
+/* Botón Reset (Morado) */
+.seg-btn-reset {
+    background: var(--p);
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.seg-btn-reset:hover { filter: brightness(1.1); }
+
+/* GRID MANTENIMIENTO */
+.maint-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.maint-action-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.maint-action-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+[data-theme="light"] .maint-action-btn { background: white; border-color: rgba(0,0,0,0.1); }
+
+/* Iconos de colores en mantenimiento */
+.maint-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.maint-icon.green { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.maint-icon.orange { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+
+.maint-text { display: flex; flex-direction: column; }
+.maint-head { font-weight: 700; font-size: 0.9rem; color: var(--txt); margin-bottom: 2px; }
+.maint-sub { font-size: 0.7rem; color: var(--muted); }
