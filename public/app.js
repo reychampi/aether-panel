@@ -1,103 +1,29 @@
-// Mantenemos las variables globales
+const socket = io();
+let currentPath = '';
+
+// Variables para Charts
+let cpuChart, ramChart, detailChart;
+const MAX_DATA_POINTS = 20;
+
+// Variables Globales
 let whitelistData = ["Admin", "Moderator"]; // Mock inicial
 
-let currentPath = '';
-// MODIFICADO: loadConfig ahora incluye la Whitelist
-function loadConfig() {
-    api('config').then(data => {
-        // ... (lógica de fallback existente para data) ...
-        if(!data || Object.keys(data).length === 0 || data.success) {
-             data = {
-                "server-port": 25565,
-                "online-mode": "false",
-                "motd": "A Minecraft Server",
-                "max-players": 20,
-                "white-list": "false",
-                "level-type": "default"
-            };
-        }
+// === CONFIGURACIÓN GLOBAL ===
+// En un entorno real, esto vendría del servidor. 
+// Aquí lo inicializamos pero luego intentaremos sobreescribirlo con fetch.
+let SERVER_MODE = 'cracked'; 
 
-        let html = '<h3 class="section-label">Propiedades del Servidor</h3><div class="cfg-grid">';
-        
-        // Renderizar Inputs de Configuración
-        Object.entries(data).forEach(([key, value]) => {
-            html += `
-            <div class="cfg-item">
-                <label class="cfg-label">${key}</label>
-                <input class="cfg-in" data-key="${key}" value="${value}">
-            </div>`;
-        });
-        html += '</div>';
-
-        // --- SECCIÓN WHITELIST (NUEVA) ---
-        html += `
-        <div class="whitelist-container">
-            <div class="whitelist-header">
-                <h3 class="section-label" style="margin:0">Gestión de Whitelist</h3>
-                <div class="whitelist-input-group">
-                    <input type="text" id="wl-add-input" class="cfg-in" placeholder="Nombre de usuario" style="width:150px">
-                    <button class="btn btn-primary" style="padding:5px 15px" onclick="addWhitelistUser()"><i class="fa-solid fa-plus"></i></button>
-                </div>
-            </div>
-            <div id="whitelist-grid" class="whitelist-grid">
-                <!-- Los usuarios se renderizan aquí -->
-            </div>
-        </div>
-        
-        <div style="margin-top:20px; text-align:right">
-            <button class="btn btn-primary" onclick="saveConfig()"><i class="fa-solid fa-save"></i> Guardar Todo</button>
-        </div>
-        `;
-        
-        document.getElementById('cfg-list').innerHTML = html;
-        renderWhitelist(); // Renderizar chips iniciales
-
-    }).catch(err => {
-        console.error(err);
-        document.getElementById('cfg-list').innerHTML = '<p style="color:red">Error cargando configuración.</p>';
-    });
-}
-
-// --- NUEVAS FUNCIONES PARA WHITELIST ---
-function renderWhitelist() {
-    const grid = document.getElementById('whitelist-grid');
-    if(!grid) return;
-    
-    let html = '';
-    if(whitelistData.length === 0) {
-        html = '<span style="color:var(--text-muted); font-size:0.8rem; padding:10px">La lista blanca está vacía.</span>';
-    } else {
-        whitelistData.forEach(user => {
-            // Intentar obtener avatar (si es premium, sino inicial)
-            const avatarUrl = `https://minotar.net/helm/${user}/24.png`;
-            // Fallback visual simple para el chip
-            html += `
-            <div class="player-chip">
-                <img src="${avatarUrl}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjM2I4MmY2Ii8+PC9zdmc+'" class="chip-avatar">
-                <span>${user}</span>
-                <i class="fa-solid fa-xmark chip-remove" onclick="removeWhitelistUser('${user}')"></i>
-            </div>`;
-        });
+// --- INICIALIZACIÓN ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Setup Xterm
+    if(document.getElementById('terminal')) {
+        try {
+            term.open(document.getElementById('terminal'));
+            term.loadAddon(fitAddon);
+            term.writeln('\x1b[1;36m>>> AETHER PANEL.\x1b[0m\r\n');
+            setTimeout(() => fitAddon.fit(), 200);
+        } catch(e){}
     }
-    grid.innerHTML = html;
-}
-
-function addWhitelistUser() {
-    const input = document.getElementById('wl-add-input');
-    const name = input.value.trim();
-    if(name && !whitelistData.includes(name)) {
-        whitelistData.push(name);
-        input.value = '';
-        renderWhitelist();
-        // En producción: api('whitelist/add', {name})
-    }
-}
-
-function removeWhitelistUser(name) {
-    whitelistData = whitelistData.filter(u => u !== name);
-    renderWhitelist();
-    // En producción: api('whitelist/remove', {name})
-}
 
     // 2. Info Servidor (Package.json)
     fetch('package.json')
@@ -240,16 +166,12 @@ function updateDashboardAvatars(playersList) {
     container.innerHTML = html;
 }
 
-// --- CONFIG EDITOR (REAL PROPERTIES) ---
+// --- CONFIG EDITOR (REAL PROPERTIES) + WHITELIST ---
 function loadConfig() {
     api('config').then(data => {
-        // data se espera que sea un objeto JSON: { "server-port": 25565, "motd": "Minecraft Server", ... }
-        // Si el backend devuelve success:true sin datos, hay que arreglar el backend.
-        // Aquí asumimos que recibimos datos correctos o usamos un fallback.
-        
-        // Mock fallback si data está vacío para demostración
+        // ... (lógica de fallback existente para data) ...
         if(!data || Object.keys(data).length === 0 || data.success) {
-            data = {
+             data = {
                 "server-port": 25565,
                 "online-mode": "false",
                 "motd": "A Minecraft Server",
@@ -259,17 +181,43 @@ function loadConfig() {
             };
         }
 
-        let html = '';
+        let html = '<h3 class="section-label">Propiedades del Servidor</h3><div class="cfg-grid">';
+        
+        // Renderizar Inputs de Configuración
         Object.entries(data).forEach(([key, value]) => {
             html += `
-            <div class="setting-row" style="margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:10px;">
-                <label style="font-weight:600; color:var(--text-muted); font-family:var(--font-mono); font-size:0.85rem">${key}</label>
-                <input class="cfg-in" data-key="${key}" value="${value}" 
-                       style="background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.1); color:white; padding:8px 12px; border-radius:8px; width:200px; text-align:right;">
+            <div class="cfg-item">
+                <label class="cfg-label">${key}</label>
+                <input class="cfg-in" data-key="${key}" value="${value}">
             </div>`;
         });
+        html += '</div>';
+
+        // --- SECCIÓN WHITELIST (NUEVA) ---
+        html += `
+        <div class="whitelist-container">
+            <div class="whitelist-header">
+                <h3 class="section-label" style="margin:0">Gestión de Whitelist</h3>
+                <div class="whitelist-input-group">
+                    <input type="text" id="wl-add-input" class="cfg-in" placeholder="Nombre de usuario" style="width:150px">
+                    <button class="btn btn-primary" style="padding:5px 15px" onclick="addWhitelistUser()"><i class="fa-solid fa-plus"></i></button>
+                </div>
+            </div>
+            <div id="whitelist-grid" class="whitelist-grid">
+                <!-- Los usuarios se renderizan aquí -->
+            </div>
+        </div>
+        
+        <div style="margin-top:20px; text-align:right">
+            <button class="btn btn-primary" onclick="saveConfig()"><i class="fa-solid fa-save"></i> Guardar Todo</button>
+        </div>
+        `;
+        
         document.getElementById('cfg-list').innerHTML = html;
+        renderWhitelist(); // Renderizar chips iniciales
+
     }).catch(err => {
+        console.error(err);
         document.getElementById('cfg-list').innerHTML = '<p style="color:red">Error cargando configuración.</p>';
     });
 }
@@ -278,7 +226,9 @@ function saveConfig() {
     const inputs = document.querySelectorAll('.cfg-in');
     const newConfig = {};
     inputs.forEach(input => {
-        newConfig[input.dataset.key] = input.value;
+        if (input.dataset.key) { // Fix: Solo guardar si tiene data-key
+            newConfig[input.dataset.key] = input.value;
+        }
     });
     
     api('config/save', newConfig).then(res => {
@@ -289,6 +239,47 @@ function saveConfig() {
             refreshDashboardData(); // Recargar avatares
         }
     });
+}
+
+// --- NUEVAS FUNCIONES PARA WHITELIST ---
+function renderWhitelist() {
+    const grid = document.getElementById('whitelist-grid');
+    if(!grid) return;
+    
+    let html = '';
+    if(whitelistData.length === 0) {
+        html = '<span style="color:var(--text-muted); font-size:0.8rem; padding:10px">La lista blanca está vacía.</span>';
+    } else {
+        whitelistData.forEach(user => {
+            // Intentar obtener avatar (si es premium, sino inicial)
+            const avatarUrl = `https://minotar.net/helm/${user}/24.png`;
+            // Fallback visual simple para el chip
+            html += `
+            <div class="player-chip">
+                <img src="${avatarUrl}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjM2I4MmY2Ii8+PC9zdmc+'" class="chip-avatar">
+                <span>${user}</span>
+                <i class="fa-solid fa-xmark chip-remove" onclick="removeWhitelistUser('${user}')"></i>
+            </div>`;
+        });
+    }
+    grid.innerHTML = html;
+}
+
+function addWhitelistUser() {
+    const input = document.getElementById('wl-add-input');
+    const name = input.value.trim();
+    if(name && !whitelistData.includes(name)) {
+        whitelistData.push(name);
+        input.value = '';
+        renderWhitelist();
+        // En producción: api('whitelist/add', {name})
+    }
+}
+
+function removeWhitelistUser(name) {
+    whitelistData = whitelistData.filter(u => u !== name);
+    renderWhitelist();
+    // En producción: api('whitelist/remove', {name})
 }
 
 
@@ -302,14 +293,14 @@ function initCharts() {
         animation: { duration: 0 }
     };
 
-    const ctxCpu = document.getElementById('cpu-chart')?.getContext('2d');
+    const ctxCpu = document.getElementById('cpuChart')?.getContext('2d');
     if(ctxCpu) {
         const grad = ctxCpu.createLinearGradient(0, 0, 0, 100);
         grad.addColorStop(0, 'rgba(139, 92, 246, 0.5)'); grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
         cpuChart = new Chart(ctxCpu, { type: 'line', data: { labels: Array(MAX_DATA_POINTS).fill(''), datasets: [{ data: Array(MAX_DATA_POINTS).fill(0), borderColor: '#8b5cf6', backgroundColor: grad, fill: true }] }, options: commonOptions });
     }
 
-    const ctxRam = document.getElementById('ram-chart')?.getContext('2d');
+    const ctxRam = document.getElementById('ramChart')?.getContext('2d');
     if(ctxRam) {
         const grad = ctxRam.createLinearGradient(0, 0, 0, 100);
         grad.addColorStop(0, 'rgba(6, 182, 212, 0.5)'); grad.addColorStop(1, 'rgba(6, 182, 212, 0)');
@@ -410,7 +401,10 @@ function navigateSidebar(dir) {
 function setTab(t, btn) {
     document.querySelectorAll('.tab-view').forEach(e => e.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(e => { e.classList.remove('active'); e.setAttribute('aria-selected','false'); });
-    document.getElementById('tab-' + t).classList.add('active');
+    // Fix: Asegurar que el elemento existe antes de añadir clase
+    const tabContent = document.getElementById('tab-' + t);
+    if (tabContent) tabContent.classList.add('active');
+    
     const sbBtn = btn || document.querySelector(`#nav-${t}`);
     if(sbBtn) { sbBtn.classList.add('active'); sbBtn.setAttribute('aria-selected','true'); if(!btn) sbBtn.focus(); }
     if(t==='console') setTimeout(()=>fitAddon.fit(),100);
@@ -435,5 +429,5 @@ function loadFiles(p){ /* ... */ }
 function uploadFile(){ /* ... */ }
 function createBackup(){ /* ... */ }
 function loadBackups(){ /* ... */ }
-function saveCfg(){ saveConfig(); } // Usar la nueva función saveConfig
+function saveCfg(){ saveConfig(); } 
 function copyIP(){ /* ... */ }
