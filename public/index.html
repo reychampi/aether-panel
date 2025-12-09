@@ -36,18 +36,68 @@
     </div>
 
     <div id="appearance-modal" class="modal-overlay" style="display:none">
-        <div class="modal glass modal-small">
-            <div class="modal-header"><h3><i class="fa-solid fa-paintbrush"></i> Apariencia</h3><button class="btn btn-ghost" onclick="document.getElementById('appearance-modal').style.display='none'"><i class="fa-solid fa-xmark"></i></button></div>
-            <div style="padding:30px; display:flex; flex-direction:column; gap:25px">
-                <div class="cfg-item"><label class="cfg-label" style="margin-bottom:10px">Tema del Sistema</label><div class="control-row"><div class="control-group"><button id="theme-btn-light" onclick="setTheme('light')" class="control-btn" title="Claro"><i class="fa-solid fa-sun"></i> Claro</button><button id="theme-btn-dark" onclick="setTheme('dark')" class="control-btn active" title="Oscuro"><i class="fa-solid fa-moon"></i> Oscuro</button><button id="theme-btn-auto" onclick="setTheme('auto')" class="control-btn" title="Sistema"><i class="fa-solid fa-desktop"></i> Auto</button></div></div></div>
-                <div class="cfg-item"><label class="cfg-label" style="margin-bottom:10px">Color de Acento</label><div style="display:flex; gap:10px; margin-bottom:10px;"><button id="accent-mode-auto" onclick="setAccentMode('auto')" class="control-btn active" style="flex:1">Auto</button><button id="accent-mode-manual" onclick="setAccentMode('manual')" class="control-btn" style="flex:1">Manual</button></div><div id="manual-color-wrapper" style="display:none; animation:fadeIn 0.3s"><div style="display:flex; gap:10px; align-items:center"><input type="color" id="accent-picker" class="cfg-in" style="height:50px; padding:0; cursor:pointer; flex:1" onchange="setAccentColor(this.value)"><div style="font-size:0.8rem; color:var(--muted)">Elige tu color</div></div></div></div>
-                <div class="cfg-item"><label class="cfg-label" style="margin-bottom:10px">Estilo Visual</label><div class="control-row"><div class="control-group"><button onclick="setDesign('glass')" id="modal-btn-glass" class="control-btn active">Glass</button><button onclick="setDesign('material')" id="modal-btn-material" class="control-btn">Material</button></div></div></div>
+        <div class="modal glass" style="max-width: 480px; padding: 0; overflow: hidden;">
+            
+            <div class="modal-header" style="border:none; padding: 20px 24px;">
+                <h3 style="font-weight: 800; font-size: 1.1rem; display:flex; align-items:center; gap:10px;">
+                    <i class="fa-solid fa-paintbrush"></i> Personalización
+                </h3>
+                <button class="btn btn-ghost" onclick="document.getElementById('appearance-modal').style.display='none'" style="width:32px; height:32px; padding:0;">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div style="padding: 0 24px 24px 24px; display:flex; flex-direction:column; gap:20px;">
                 
-                <div class="cfg-item" style="border-top: 1px solid var(--glass-border); padding-top: 20px; margin-top: 10px;">
-                    <label class="cfg-label" style="margin-bottom:10px; color: var(--warning);">Mantenimiento</label>
-                    <div class="control-row">
-                        <button onclick="checkUpdate()" class="control-btn" style="flex:1; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);"><i class="fa-solid fa-cloud-arrow-down"></i> Actualizar</button>
-                        <button onclick="forceUIUpdate()" class="control-btn" style="flex:1; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);"><i class="fa-solid fa-rotate"></i> Recargar UI</button>
+                <div class="settings-group-card">
+                    <h4 class="settings-group-title">APARIENCIA</h4>
+                    
+                    <div class="setting-row">
+                        <span class="setting-label">Tema</span>
+                        <div class="segment-control">
+                            <button id="theme-btn-light" onclick="setTheme('light')" class="seg-item"><i class="fa-solid fa-sun"></i></button>
+                            <button id="theme-btn-dark" onclick="setTheme('dark')" class="seg-item active"><i class="fa-solid fa-moon"></i></button>
+                            <button id="theme-btn-auto" onclick="setTheme('auto')" class="seg-item text">Auto</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-row">
+                        <span class="setting-label">Diseño</span>
+                        <div class="segment-control">
+                            <button onclick="setDesign('glass')" id="modal-btn-glass" class="seg-item text active">Glass</button>
+                            <button onclick="setDesign('material')" id="modal-btn-material" class="seg-item text">Flat</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-row">
+                        <span class="setting-label">Acento</span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="color-circle-wrapper">
+                                <input type="color" id="accent-picker" onchange="setAccentColor(this.value)">
+                            </div>
+                            <button id="accent-mode-auto" onclick="setAccentMode('auto')" class="seg-btn-reset">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-group-card">
+                    <h4 class="settings-group-title" style="color: var(--warning);">MANTENIMIENTO</h4>
+                    <div class="maint-grid">
+                        <button onclick="checkUpdate()" class="maint-action-btn">
+                            <div class="maint-icon green"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                            <div class="maint-text">
+                                <span class="maint-head">Actualizar</span>
+                                <span class="maint-sub">Buscar versión</span>
+                            </div>
+                        </button>
+                        
+                        <button onclick="forceUIUpdate()" class="maint-action-btn">
+                            <div class="maint-icon orange"><i class="fa-solid fa-rotate"></i></div>
+                            <div class="maint-text">
+                                <span class="maint-head">Recargar UI</span>
+                                <span class="maint-sub">Reparar fallos</span>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
@@ -251,7 +301,7 @@
                     </div>
                     
                     <div id="cfg-list" class="cfg-grid"></div>
-                    </div>
+                </div>
                 <div style="height: 50px;"></div>
             </div>
 
