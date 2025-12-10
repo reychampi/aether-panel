@@ -36,7 +36,6 @@ const mcServer = new MCManager(io);
 
 // --- CLIENTE API GITHUB [CONFIGURACIÓN] ---
 const apiClient = axios.create({ headers: { 'User-Agent': 'Aether-Panel/1.6.0' }, timeout: 10000 });
-// REPOSITORIO CONFIGURADO: femby08/aether-panel
 const REPO_OWNER = 'femby08';
 const REPO_NAME = 'aether-panel';
 const BRANCH = 'main';
@@ -46,7 +45,6 @@ const REPO_ZIP = `https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/hea
 
 // --- UTILIDADES ---
 
-// 1. Calcular tamaño directorio (Fallback)
 const getDirSize = (dirPath) => {
     let size = 0;
     try {
@@ -63,7 +61,6 @@ const getDirSize = (dirPath) => {
     return size;
 };
 
-// 2. Detectar IP
 function getServerIP() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
@@ -76,7 +73,6 @@ function getServerIP() {
     return '127.0.0.1';
 }
 
-// 3. Enviar Estadísticas
 function sendStats(cpuPercent, diskBytes, res) {
     const cpus = os.cpus();
     let cpuSpeed = cpus.length > 0 ? cpus[0].speed : 0;
@@ -137,16 +133,13 @@ app.get('/api/update/check', async (req, res) => {
             remotePkg = JSON.parse(content);
         } catch (apiError) {
             console.warn("GitHub API limit hit, switching to RAW:", apiError.message);
-            // Fallback a RAW con timestamp para evitar caché de GitHub
             remotePkg = (await apiClient.get(`${REPO_RAW}/package.json?t=${Date.now()}`)).data;
         }
         
-        // Si hay cambio de versión -> HARD UPDATE
         if (remotePkg.version !== localPkg.version) {
             return res.json({ type: IS_WIN ? 'manual' : 'hard', local: localPkg.version, remote: remotePkg.version });
         }
 
-        // Si la versión es igual, comprobamos cambios visuales (Soft Check)
         const files = ['public/index.html', 'public/style.css', 'public/app.js'];
         let hasChanges = false;
         for (const f of files) {
@@ -155,7 +148,6 @@ app.get('/api/update/check', async (req, res) => {
                 const localPath = path.join(__dirname, f);
                 if (fs.existsSync(localPath)) {
                     const localContent = fs.readFileSync(localPath, 'utf8');
-                    // Comprobación simple de contenido
                     if (JSON.stringify(remoteContent) !== JSON.stringify(localContent)) { hasChanges = true; break; }
                 }
             } catch(e) {}
@@ -168,7 +160,6 @@ app.get('/api/update/check', async (req, res) => {
 app.post('/api/update/perform', async (req, res) => {
     const { type } = req.body;
     
-    // --- HARD UPDATE (Reinicia el servicio) ---
     if (type === 'hard') {
         if(IS_WIN) {
             const updater = spawn('cmd.exe', ['/c', 'start', 'updater.bat'], { detached: true, stdio: 'ignore' });
@@ -180,14 +171,11 @@ app.post('/api/update/perform', async (req, res) => {
         }
         res.json({ success: true, mode: 'hard' });
 
-    // --- SOFT UPDATE (Sin reinicio) ---
     } else if (type === 'soft') {
         io.emit('toast', { type: 'info', msg: '🎨 Descargando interfaz...' });
         
         try {
             if (!IS_WIN) {
-                // SCRIPT ROBUSTO DE ACTUALIZACIÓN VISUAL
-                // 1. Usa curl o wget. 2. Descomprime. 3. Busca la carpeta correcta. 4. Copia.
                 const script = `
                     rm -rf /tmp/aup_temp
                     mkdir -p /tmp/aup_temp
@@ -200,7 +188,6 @@ app.post('/api/update/perform', async (req, res) => {
                     echo "Descomprimiendo..."
                     unzip -q -o /tmp/aup_temp/update.zip -d /tmp/aup_temp/extract
                     
-                    # Detectar carpeta interna (ej: aether-panel-main) dinámicamente
                     DIR=$(ls /tmp/aup_temp/extract | head -n 1)
                     SOURCE="/tmp/aup_temp/extract/$DIR/public"
                     
@@ -224,7 +211,6 @@ app.post('/api/update/perform', async (req, res) => {
                 });
 
             } else {
-                // Fallback Windows (Archivo por archivo)
                 const files = ['public/index.html', 'public/style.css', 'public/app.js'];
                 for (const f of files) {
                     const c = (await apiClient.get(`${REPO_RAW}/${f}?t=${Date.now()}`)).data;
@@ -318,6 +304,84 @@ app.get('/api/stats', (req, res) => {
 
 app.get('/api/status', (req, res) => res.json(mcServer.getStatus()));
 app.post('/api/power/:a', async (req, res) => { try { if (mcServer[req.params.a]) await mcServer[req.params.a](); res.json({ success: true }); } catch (e) { res.status(500).json({}); } });
+
+// ==========================================
+//          WHITELIST API (NUEVO)
+// ==========================================
+
+const getWhitelistPath = () => path.join(SERVER_DIR, 'whitelist.json');
+
+app.get('/api/whitelist', (req, res) => {
+    try {
+        const p = getWhitelistPath();
+        if(!fs.existsSync(p)) return res.json([]);
+        res.json(JSON.parse(fs.readFileSync(p, 'utf8')));
+    } catch(e) { res.json([]); }
+});
+
+app.post('/api/whitelist/add', async (req, res) => {
+    const name = req.body.user;
+    if(mcServer.status === 'ONLINE') {
+        mcServer.sendCommand(`whitelist add ${name}`);
+        res.json({ success: true });
+    } else {
+        try {
+            // Modo Offline: Intentamos buscar UUID en Mojang para añadirlo manualmente
+            // Nota: Esto requiere internet en el servidor.
+            const mojang = await axios.get(`https://api.mojang.com/users/profiles/minecraft/${name}`);
+            const uuidRaw = mojang.data.id;
+            // Formatear UUID con guiones (8-4-4-4-12)
+            const uuid = uuidRaw.replace(/(\w{8})(\w{4})(\w{4})(\w{4})(\w{12})/, "$1-$2-$3-$4-$5");
+            
+            const p = getWhitelistPath();
+            let current = [];
+            if(fs.existsSync(p)) current = JSON.parse(fs.readFileSync(p, 'utf8'));
+            
+            if(!current.find(u => u.name.toLowerCase() === name.toLowerCase())) {
+                current.push({ uuid, name: mojang.data.name });
+                fs.writeFileSync(p, JSON.stringify(current, null, 2));
+            }
+            res.json({ success: true });
+        } catch(e) {
+            console.error("Error whitelist offline:", e.message);
+            // Fallback: Si falla API Mojang, no podemos añadir offline porque falta UUID
+            res.json({ success: false }); 
+        }
+    }
+});
+
+app.post('/api/whitelist/remove', (req, res) => {
+    const name = req.body.user;
+    if(mcServer.status === 'ONLINE') {
+        mcServer.sendCommand(`whitelist remove ${name}`);
+        res.json({ success: true });
+    } else {
+        try {
+            const p = getWhitelistPath();
+            if(fs.existsSync(p)) {
+                let current = JSON.parse(fs.readFileSync(p, 'utf8'));
+                current = current.filter(u => u.name.toLowerCase() !== name.toLowerCase());
+                fs.writeFileSync(p, JSON.stringify(current, null, 2));
+            }
+            res.json({ success: true });
+        } catch(e) { res.json({ success: false }); }
+    }
+});
+
+app.post('/api/whitelist/toggle', (req, res) => {
+    try {
+        const props = mcServer.readProperties();
+        props['white-list'] = req.body.enabled;
+        mcServer.writeProperties(props);
+        
+        if(mcServer.status === 'ONLINE') {
+            mcServer.sendCommand(`whitelist ${req.body.enabled ? 'on' : 'off'}`);
+        }
+        res.json({ success: true });
+    } catch(e) { res.json({ success: false }); }
+});
+
+// ==========================================
 
 // --- FILES & BACKUPS ---
 app.get('/api/files', (req, res) => {
